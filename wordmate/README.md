@@ -223,3 +223,9 @@ renderer/          桌面界面（原生 HTML/CSS/JS，无框架）
 ## v0.4.4 模型返回异常
 
 空响应、格式异常或截断会自动重试一次；完整片段译文缺少 translation 字段时可恢复。持续失败时展开「查看失败内容」检查具体片段及原因，再点击「重试未完成内容」。认证错误需先修复设置，推理内容和缺失片段不会覆盖原文。更新后重新加载扩展并刷新网页。
+
+## v0.4.5 安装与重启
+
+构建后运行 `npm run install:mac`，沿用已存在的 `/Applications/WordMate.app`，否则安装到 `~/Applications`。旧应用备份在 Application Support/WordMate/app-backup，学习数据库不覆盖。该命令更新确切应用路径的本机连接，避免旧开机启动副本与新版插件混用。
+
+本机连接遇到缺失 / 陈旧 socket 时，会后台唤起确切应用并重连；运行中的新版可以重建连接而不弹出查词窗。检查命令：`npm run test:host`。

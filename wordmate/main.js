@@ -32,6 +32,7 @@ if (!gotLock) {
 } else {
   // 再次启动时（比如又跑了一次 npm start），聚焦已有查词窗而不是静默忽略
   app.on('second-instance', (event, argv) => {
+    if (argv.includes('--repair-browser-bridge')) { repairBrowserBridge(); return }
     const url = argv.find(x => x.startsWith('wordmate://'))
     if (url) handleTranslateUrl(url)
     else open('lookup')
@@ -72,6 +73,24 @@ function goBack(name) {
   return true
 }
 const resourceRoot = app.isPackaged ? process.resourcesPath : __dirname
+let browserBridge = null
+let bridgeRepair = null
+function repairBrowserBridge() {
+  if (!db.ready()) return Promise.resolve()
+  if (bridgeRepair) return bridgeRepair
+  const socketPath = path.join(app.getPath('userData'), 'browser.sock')
+  if (browserBridge?.listening && fs.existsSync(socketPath)) return Promise.resolve()
+  bridgeRepair = new Promise(resolve => {
+    const restart = () => {
+      browserBridge = require('./src/browser-bridge').startBrowserBridge(app.getPath('userData'), changed)
+      browserBridge.once('listening', resolve)
+      browserBridge.once('error', resolve)
+    }
+    if (browserBridge?.listening) browserBridge.dispose(restart)
+    else restart()
+  }).finally(() => { bridgeRepair = null })
+  return bridgeRepair
+}
 const integration = { services: false, shortcuts: {}, browser: false }
 function changed(type, id) {
   updateBadge()
@@ -397,8 +416,8 @@ app.whenReady().then(() => {
   app.setAsDefaultProtocolClient('wordmate')
   const hostManifest = path.join(app.getPath('appData'), 'Google/Chrome/NativeMessagingHosts/com.qiji.wordmate.json')
   integration.browser = fs.existsSync(hostManifest)
-  const browserBridge = require('./src/browser-bridge').startBrowserBridge(app.getPath('userData'), changed)
-  app.on('will-quit', () => browserBridge.close())
+  browserBridge = require('./src/browser-bridge').startBrowserBridge(app.getPath('userData'), changed)
+  app.on('will-quit', () => browserBridge?.dispose())
   registerIpc()
   createTray()
   if (!process.env.WM_TEST_SUITE) startMacServices()
@@ -524,4 +543,4 @@ app.whenReady().then(() => {
 // 菜单栏应用：所有窗口关闭后仍保持运行
 app.on('window-all-closed', () => {})
 
-module.exports = { open, windows, maintenance, integration, changed, handleTranslateUrl }
+module.exports = { repairBrowserBridge, open, windows, maintenance, integration, changed, handleTranslateUrl }

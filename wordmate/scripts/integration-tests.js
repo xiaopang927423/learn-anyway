@@ -150,7 +150,10 @@ app.whenReady().then(async () => {
         client.on('end',()=>{try{resolve(JSON.parse(data))}catch(error){reject(error)}})
       })
     }
-    const pageAi=require('../src/ai')
+    fs.unlinkSync(path.join(process.env.WM_USER_DATA,'browser.sock'))
+    await runtime.repairBrowserBridge()
+    check((await browserRpc({action:'get-preferences'})).ok,'missing socket is repaired by the running application without a UI restart')
+        const pageAi=require('../src/ai')
     const originalPassage=pageAi.translatePassage
     let pageCalls=0
     pageAi.translatePassage=async (text,target)=>{pageCalls++;return {type:'sentence',translation:target+':'+text}}

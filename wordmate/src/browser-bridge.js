@@ -5,7 +5,10 @@ function startBrowserBridge(userData, onChanged = () => {}) {
   const socketPath = path.join(userData, 'browser.sock')
   try { fs.unlinkSync(socketPath) } catch (error) { if (error.code !== 'ENOENT') throw error }
   let active = 0
+  const connections = new Set()
   const server = net.createServer(socket => {
+    connections.add(socket)
+    socket.on('close', () => connections.delete(socket))
     socket.setEncoding('utf8')
     let buffer = '', handled = false
     socket.setTimeout(60000, () => socket.destroy())
@@ -52,6 +55,10 @@ function startBrowserBridge(userData, onChanged = () => {}) {
       finally { active-- }
     })
   })
+  server.dispose = callback => {
+    for (const socket of connections) socket.destroy()
+    server.close(callback)
+  }
   server.on('error', error => console.error('[WordMate] 浏览器连接启动失败:', error.message))
   server.listen(socketPath, () => fs.chmodSync(socketPath, 0o600))
   return server

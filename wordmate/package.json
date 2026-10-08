@@ -1,6 +1,6 @@
 {
   "name": "wordmate",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "WordMate —— 工作场景 AI 生词助手（菜单栏查词 + 生词本 + 间隔重复复习）",
   "main": "main.js",
   "scripts": {
@@ -12,7 +12,9 @@
     "test": "node --test test/*.test.js",
     "test:integration": "node_modules/.bin/electron scripts/integration-tests.js",
     "test:browser": "node_modules/.bin/electron scripts/browser-render-tests.js",
-    "lint": "node scripts/check-project.js"
+    "lint": "node scripts/check-project.js",
+    "install:mac": "node scripts/install-mac.js",
+    "test:host": "python3 scripts/browser-host-tests.py"
   },
   "license": "MIT",
   "devDependencies": {

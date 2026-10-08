@@ -3,7 +3,7 @@ function nativeTranslate(message) {
   return new Promise((resolve, reject) => {
     const port = chrome.runtime.connectNative(HOST)
     let complete = false
-    const timer = setTimeout(() => finish(new Error('翻译超时，请重试')), 60000)
+    const timer = setTimeout(() => finish(new Error('翻译超时，请重试')), 75000)
     function finish(error, result) {
       if (complete) return
       complete = true; clearTimeout(timer); port.disconnect()
