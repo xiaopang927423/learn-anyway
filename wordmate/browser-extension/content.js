@@ -352,6 +352,7 @@
     if (!nodes.length) { status(entries.size ? '当前页面已经翻译完成。' : '未找到可翻译的可见文字。图片、代码、表单和未加载内容不翻译。'); return }
     pageRunning = true
     let next = 0, finished = 0, failures = 0, firstError = '', abort = false
+    const failedItems = []
     const renderProgress = () => { if (seq === pageSeq && viewMode === 'page') status(`已翻译 ${finished} / ${nodes.length} 处${failures ? `，${failures} 处失败` : ''}。${readingMode === 'bilingual' ? '逐段双语对照' : '仅译文阅读'}。`) }
     renderProgress()
     async function worker() {
@@ -364,6 +365,7 @@
         } catch (error) {
           if (seq !== pageSeq) return
           failures++; firstError ||= error.message
+          failedItems.push({ text: group.text.slice(0,240), error: error.message })
           // 连接/配置失效时停止整页队列，避免对每个节点重复请求。
           if (/connect|host|连接|配置|运行|API Key|HTTP 40[134]|HTTP 429/i.test(error.message)) { abort = true; autoWatching = false }
         }
@@ -376,6 +378,12 @@
     if (failures) autoWatching = false
     if (viewMode !== 'page') return
     status(`本次翻译：${finished} 处成功${failures ? `，${failures} 处失败：${firstError}` : ''}${abort ? '；后续内容未翻译，请修复连接后重试。' : autoWatching ? '；自动补译新内容已开启' : ''}。`, failures > 0)
+    if (failedItems.length) {
+      const details = element('details')
+      details.append(element('summary', `查看失败内容（${failedItems.length}）`))
+      for (const item of failedItems) { const row = element('div'); row.append(element('p', item.text, 'muted'), element('p', item.error, 'error')); details.append(row) }
+      body.append(details)
+    }
     toolbar.prepend(button(failures || abort ? '重试未完成内容' : '翻译新加载内容', () => translatePage(target)))
     if (!failures && !abort) collapse(true)
     if (autoWatching) scheduleContent()

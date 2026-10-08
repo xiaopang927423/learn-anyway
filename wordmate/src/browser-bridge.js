@@ -60,7 +60,7 @@ async function translatePageBlock(text, target = 'zh', segments) {
   if (!['zh', 'en'].includes(target)) throw new Error('目标语言不支持')
   const settings = db.getSettings()
   if (!settings.apiKey) throw new Error('请先在 WordMate 设置中配置模型')
-  const key = 'page-v2:' + require('crypto').createHash('sha256')
+  const key = 'page-v3:' + require('crypto').createHash('sha256')
     .update(JSON.stringify([text, target, segments || null, settings.baseUrl, settings.model, settings.thinkingEnabled === true, settings.thinkingParameter || 'auto'])).digest('hex')
   const cached = db.getCache(key)
   if (cached) { try { return { ...JSON.parse(cached), cached: true } } catch {} }

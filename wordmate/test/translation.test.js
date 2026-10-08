@@ -84,3 +84,35 @@ test('layout fragment translations are validated before replacing page text', as
     await assert.rejects(ai.translatePassage('Please check','zh',settings,['Please ','check']),/排版/)
   }finally{global.fetch=original}
 })
+
+test('segments-only response provides valid translation without redundant translation field',async()=>{
+ const original=global.fetch
+ global.fetch=async()=>({ok:true,json:async()=>({choices:[{message:{content:[{type:'text',text:'```json\n{"segments":{"0":"请","1":"查看"}}\n```'}]}}]})})
+ try{const result=await ai.translatePassage('Please check','zh',{model:'diffu'},['Please ','check']);assert.equal(result.translation,'请查看');assert.deepEqual(result.segments,['请','查看'])}finally{global.fetch=original}
+})
+test('empty final answer is retried once without reading reasoning as translation',async()=>{
+ const original=global.fetch;let calls=0;let signal
+ global.fetch=async(url,options)=>{calls++;if(signal)assert.equal(options.signal,signal);signal=options.signal
+  return {ok:true,json:async()=>({choices:[{finish_reason:'stop',message:calls===1?{content:'',reasoning_content:'内部分析'}:{content:'{"translation":"你好"}'}}]})}}
+ try{const result=await ai.translatePassage('Hello','zh',{model:'diffu'});assert.equal(result.translation,'你好');assert.equal(result.recovered,true);assert.equal(calls,2)}finally{global.fetch=original}
+})
+test('truncated model output fails after a bounded retry with useful diagnosis',async()=>{
+ const original=global.fetch;let calls=0
+ global.fetch=async()=>{calls++;return {ok:true,json:async()=>({choices:[{finish_reason:'length',message:{content:'{"translation":"未完成'}}]})}}
+ try{await assert.rejects(ai.translatePassage('Hello','zh',{}),/截断/);assert.equal(calls,2)}finally{global.fetch=original}
+})
+test('multiple JSON objects and tool-call responses are parsed without greedy merging',async()=>{
+ const original=global.fetch
+ global.fetch=async()=>({ok:true,json:async()=>({choices:[{message:{content:'说明 {"metadata":"ignored"}\n{"translation":"完成 {任务}"}'}}]})})
+ try{assert.equal((await ai.translatePassage('Done','zh',{})).translation,'完成 {任务}');global.fetch=async()=>({ok:true,json:async()=>({choices:[{message:{content:'',tool_calls:[{function:{arguments:'{"translation":"完成"}'}}]}}]})});assert.equal((await ai.translatePassage('Done','zh',{})).translation,'完成')}finally{global.fetch=original}
+})
+test('authorization failures and explicit model refusals are not retried',async()=>{
+ const original=global.fetch;let calls=0
+ global.fetch=async()=>{calls++;return {ok:false,status:401}}
+ try{await assert.rejects(ai.translatePassage('Hello','zh',{}),/401/);assert.equal(calls,1);calls=0;global.fetch=async()=>{calls++;return {ok:true,json:async()=>({choices:[{message:{refusal:'declined'}}]})}};await assert.rejects(ai.translatePassage('Hello','zh',{}),/拒绝/);assert.equal(calls,1)}finally{global.fetch=original}
+})
+test('unclosed thinking blocks are not mistaken for a final JSON answer',async()=>{
+ const original=global.fetch;let calls=0
+ global.fetch=async()=>{calls++;return {ok:true,json:async()=>({choices:[{message:{content:'<think>这是草稿 {"translation":"不能使用"}'}}]})}}
+ try{await assert.rejects(ai.translatePassage('Hello','zh',{}),/格式异常/);assert.equal(calls,2)}finally{global.fetch=original}
+})
