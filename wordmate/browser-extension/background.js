@@ -24,7 +24,7 @@ async function command(tabId, name, text = '', target = 'zh', frameId = 0, readi
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({ id: 'translate', title: 'WordMate：翻译选中文本', contexts: ['selection'] })
-    chrome.contextMenus.create({ id: 'page', title: 'WordMate：翻译页面正文', contexts: ['page'] })
+    chrome.contextMenus.create({ id: 'page', title: 'WordMate：翻译页面内容', contexts: ['page'] })
     chrome.contextMenus.create({ id: 'restore', title: 'WordMate：恢复页面原文', contexts: ['page'] })
   })
 })

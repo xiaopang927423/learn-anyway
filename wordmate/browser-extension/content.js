@@ -129,30 +129,39 @@
     entries.clear()
     display('网页翻译'); status('已恢复原文。')
   }
-  const excluded = 'script,style,noscript,textarea,input,select,option,pre,code,svg,canvas,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[data-wordmate-ui],[data-wordmate-translation],nav,header,footer,aside,button,[role=button],[role=tab],[role=menu],[role=toolbar],[role=navigation],[role=tree],[role=grid],[role=row],time'
+  // 先排除真正不可翻译的内容；aside/header/div/span 本身不是排除理由。
+  const hardExcluded = 'script,style,noscript,textarea,input,select,option,pre,code,svg,canvas,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[data-wordmate-ui],[data-wordmate-translation],nav,button,[role=tab],[role=tablist],[role=menu],[role=toolbar],[role=navigation],[role=listbox],[role=combobox]'
+  const identitySelector = '[data-testid="User-Name"],[data-testid="socialContext"],[data-testid="repository-name"],[data-repository-name]'
+  const fileSelector = '[role=tree],[data-testid="repos-file-tree"],[data-testid="repository-file-list"],[data-testid="repo-file-list"],.react-directory-row,[aria-label="Files" i],[aria-label*="file list" i]'
   const postSelector = '[data-testid="tweetText"],[data-testid="postText"],[data-post-body],[data-content="post-body"]'
-  const hardExcluded = 'script,style,noscript,textarea,input,select,option,pre,code,svg,canvas,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[data-wordmate-ui],[data-wordmate-translation],nav,header,footer,aside,button,[role=tab],[role=menu],[role=toolbar],[role=navigation],time'
   function postBody(parent) {
     const explicit = parent.closest(postSelector)
     if (explicit) return explicit
     const article = parent.closest('article,[role=article]')
     if (!article || article.classList.contains('markdown-body')) return null
     const candidate = parent.closest('[dir=auto]')
-    if (!candidate || !article.contains(candidate) || candidate.closest('[data-testid="User-Name"],[data-testid="socialContext"]')) return null
+    if (!candidate || !article.contains(candidate) || candidate.closest(identitySelector)) return null
     const text = candidate.textContent.trim()
-    // 通用信息流回退只接受完整文本，不将短用户名和时间当作帖子。
     return text.split(/\s+/).length >= 6 && !candidate.querySelector('time,button,[role=toolbar],[data-testid="User-Name"],[data-testid="socialContext"],article,[role=article]') ? candidate : null
   }
+  function fileRegion(parent) {
+    if (parent.closest(fileSelector)) return true
+    const listing = parent.closest('table,[role=grid]')
+    if (!listing || listing.closest('.markdown-body,article,[role=article]')) return false
+    // 文件浏览器有技术文件链接；知识面板的普通表格 / 网格不因此排除。
+    return [...listing.querySelectorAll('a')].some(link => /^(?:\.[\w.-]+|[\w@.-]+(?:\/[\w@.-]+)+|[\w.-]+\.(?:js|ts|json|md|py|yml|yaml))$/.test(link.textContent.trim()))
+  }
   function isExcluded(parent) {
-    if (parent.closest(hardExcluded)) return true
+    if (parent.closest('header,footer') && parent.closest('a') && !parent.closest('p,blockquote,h1,h2,h3,h4,h5,h6,[role=heading]')) return true
+    if (parent.closest('.Label,[data-testid=repository-visibility]') && !parent.closest('.markdown-body') && document.querySelector('.markdown-body') && (document.querySelector(fileSelector) || [...document.querySelectorAll('table,[role=grid]')].some(listing => fileRegion(listing)))) return true
+    if (parent.closest(hardExcluded) || parent.closest(identitySelector) || fileRegion(parent)) return true
+    const control = parent.closest('[role=button],[role=checkbox],[role=switch]')
+    if (!control) return false
     const post = postBody(parent)
-    if (!post) return !!parent.closest(excluded)
-    // 引用帖的外层可点击容器不是正文按钮；正文内部的按钮仍排除。
-    for (let node = parent; node; node = node.parentElement) {
-      if (node.matches('[role=button],[role=tree],[role=grid],[role=row]')) return true
-      if (node === post) break
-    }
-    return false
+    if (post && control !== post && control.contains(post)) return false
+    // 一整张可点击内容卡片不是一个操作标签；允许其中的完整说明文字。
+    const text = parent.textContent.trim()
+    return !(parent !== control && text.length >= 35 && text.split(/\s+/).length >= 6 && control.querySelector('p,div,blockquote,[role=heading]') && !control.hasAttribute('aria-haspopup'))
   }
   function updateModeButtons() {
     for (const control of modeButtons) {
@@ -188,47 +197,59 @@
     updateModeButtons()
     if (viewMode === 'page' && panel?.querySelector('h3') && entries.size) panel.querySelector('h3').textContent = mode === 'bilingual' ? '网页双语对照' : (currentTarget === 'zh' ? '网页仅中文' : '网页仅译文')
   }
-  const proseSelector = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,figcaption,dt,dd,td,th'
-  function readingRoots() {
-    // 优先文档 / 文章正文；例如仓库页面中的 README，而不是整个文件浏览器。
-    const articles = [...document.querySelectorAll('.markdown-body,article,[role=article]')]
-      .filter(root => !isExcluded(root) && root.getClientRects().length)
-    const posts = [...document.querySelectorAll(postSelector)].filter(root => !isExcluded(root) && root.getClientRects().length)
-    if (articles.length || posts.length) return [...articles.filter(root => !articles.some(other => other !== root && other.contains(root))), ...posts]
-    return [document.querySelector('main,[role=main]') || document.body]
-  }
+  const proseSelector = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,figcaption,dt,dd,td,th,[role=heading],[role=paragraph]'
   function protectedText(text) {
     const value = text.trim()
     return /^\.?[\w@.-]+(?:\/[\w@.-]+)+$/.test(value) || /^\.[\w.-]+$/.test(value) ||
-      /^[A-Z][a-z]+(?:[A-Z][A-Za-z0-9]*)+$/.test(value) || /^[a-f0-9]{7,40}$/i.test(value) || /^#[0-9]+$/.test(value) ||
-      /^\d+\s+(?:branches?|tags?|commits?|hours?|days?|weeks?|months?|years?)(?:\s+ago)?$/i.test(value) ||
+      /^(?:https?:\/\/|www\.)\S+$/i.test(value) || /^[\w.-]+\.(?:com|org|net|io|dev|co|sg)(?:\/\S*)?$/i.test(value) ||
+      /^@[A-Za-z0-9_]+$/.test(value) || /^[A-Z][a-z]+(?:[A-Z][A-Za-z0-9]*)+$/.test(value) ||
+      /^[a-f0-9]{7,40}$/i.test(value) || /^#[0-9]+$/.test(value) ||
+      /^\d+\s+(?:branches?|tags?|commits?|seconds?|minutes?|hours?|days?|weeks?|months?|years?)(?:\s+ago)?$/i.test(value) ||
       /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(value)
   }
-  function eligibleBlock(parent, roots) {
+  function structuralChild(node) {
+    return [...node.children].some(child => {
+      if (child.matches('[data-wordmate-translation],[data-wordmate-ui]') || child.closest(hardExcluded)) return false
+      const display = getComputedStyle(child).display
+      return !['inline','inline-block','contents','none'].includes(display) && !child.matches('br,img,svg')
+    })
+  }
+  function eligibleBlock(parent) {
+    if (isExcluded(parent)) return null
     const post = postBody(parent)
-    if (post && !isExcluded(parent) && roots.some(root => root.contains(post))) return post
-    const block = parent.closest(proseSelector)
-    if (!block || block.closest(excluded) || !roots.some(root => root.contains(block))) return null
-    // 正文外的文件表格、导航链接列表、徽章和可点击整行不是阅读段落。
-    const article = block.closest('.markdown-body,article,[role=article]')
-    if (article && block.tagName === 'H1' && article.querySelector('h1') === block && /^[A-Za-z0-9_.-]+$/.test(block.textContent.trim())) return null
-    if (!article && block.closest('table,[role=listbox]')) return null
-    if (block.matches('li') && !block.querySelector('p') && block.querySelector('a') && block.textContent.trim().split(/\s+/).length < 5) return null
-    const computed = getComputedStyle(block)
-    if (computed.display === 'flex' || computed.display === 'inline-flex' || computed.display === 'grid' || computed.display === 'inline-grid' || computed.whiteSpace === 'nowrap') return null
-    return block
+    if (post) return post
+    let child = parent
+    for (let node = parent; node && node !== document.body && node !== document.documentElement; node = node.parentElement) {
+      if (isExcluded(node)) return null
+      const computed = getComputedStyle(node)
+      if (node.matches(proseSelector)) {
+        if (node.closest('.markdown-body') && node.tagName === 'H1' && node.closest('.markdown-body').querySelector('h1') === node && /^[A-Za-z0-9_.-]+$/.test(node.textContent.trim())) return null
+        // 仓库页面的外层标题也作为身份标识保留，不应用到普通搜索标题。
+        if (!node.closest('.markdown-body') && /^H[1-2]$/.test(node.tagName) && /^[A-Za-z0-9_.-]+$/.test(node.textContent.trim()) && document.querySelector('.markdown-body') && (document.querySelector(fileSelector) || [...document.querySelectorAll('table,[role=grid]')].some(listing => fileRegion(listing)))) return null
+        return node
+      }
+      if (['flex','inline-flex','grid','inline-grid'].includes(computed.display)) {
+        // 内容所在的单元才是翻译块，不把整条布局行作为一个段落。
+        if (node !== parent) return child
+        if (!structuralChild(node)) return node
+        return null
+      }
+      if (['block','flow-root','list-item','table-cell','inline-block','-webkit-box','-webkit-inline-box'].includes(computed.display) && !structuralChild(node)) return node
+      child = node
+    }
+    // 孤立文字链接 / 标签也可作为可阅读内容，技术标识会在文本层过滤。
+    return parent.matches('a,span,label,div') && !structuralChild(parent) && !isExcluded(parent) ? parent : null
   }
   function sourceNodes(target) {
     reconcileEntries()
-    const groups = new Map(), roots = readingRoots()
+    const groups = new Map()
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
     while (walker.nextNode()) {
       const node = walker.currentNode, parent = node.parentElement
       if (!parent || isExcluded(parent)) continue
-      if (!node.textContent.trim() && !parent.closest('p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,figcaption,dt,dd') && !postBody(parent)) continue
       const computed = getComputedStyle(parent)
       if (computed.display === 'none' || computed.visibility === 'hidden' || !parent.getClientRects().length) continue
-      const block = eligibleBlock(parent, roots)
+      const block = eligibleBlock(parent)
       if (!block || entries.has(block)) continue
       if (!groups.has(block)) groups.set(block, [])
       groups.get(block).push(node)
@@ -275,11 +296,19 @@
     // 译文留在同一个原生段落 / 网格单元内，不新增父布局的独立网格项。
     group.block.append(output)
     const layout = []
+    const changeLayout = (name, applied) => {
+      layout.push({ name, applied, before: group.block.style.getPropertyValue(name), priority: group.block.style.getPropertyPriority(name) })
+      group.block.style.setProperty(name, applied, 'important')
+    }
     const computed = getComputedStyle(group.block)
-    if (postBody(group.block) && parseInt(computed.webkitLineClamp, 10) > 0) {
+    if (['flex','inline-flex'].includes(computed.display)) {
+      changeLayout('flex-wrap', 'wrap')
+      output.style.setProperty('flex', '0 0 100%', 'important')
+    }
+    if (['grid','inline-grid'].includes(computed.display)) output.style.setProperty('grid-column', '1 / -1', 'important')
+    if (parseInt(computed.webkitLineClamp, 10) > 0) {
       for (const [name, applied] of [['-webkit-line-clamp','none'],['max-height','none'],['overflow','visible'],['display','block']]) {
-        layout.push({ name, applied, before: group.block.style.getPropertyValue(name), priority: group.block.style.getPropertyPriority(name) })
-        group.block.style.setProperty(name, applied, 'important')
+        changeLayout(name, applied)
       }
     }
     const entry = { output, target, original: group.text, sources: translated.sources, block: group.block, layout }
@@ -346,7 +375,7 @@
     pageRunning = false
     if (failures) autoWatching = false
     if (viewMode !== 'page') return
-    status(`翻译完成：${finished} 处成功${failures ? `，${failures} 处失败：${firstError}` : ''}${abort ? '；后续内容未翻译，请修复连接后重试。' : autoWatching ? '；自动补译新内容已开启' : ''}。`, failures > 0)
+    status(`本次翻译：${finished} 处成功${failures ? `，${failures} 处失败：${firstError}` : ''}${abort ? '；后续内容未翻译，请修复连接后重试。' : autoWatching ? '；自动补译新内容已开启' : ''}。`, failures > 0)
     toolbar.prepend(button(failures || abort ? '重试未完成内容' : '翻译新加载内容', () => translatePage(target)))
     if (!failures && !abort) collapse(true)
     if (autoWatching) scheduleContent()
@@ -375,7 +404,7 @@
   document.addEventListener('mousemove', event => { hovered = event.target }, { passive:true })
   document.addEventListener('keydown', async event => {
     if (event.key !== 'Shift' || event.repeat || !hovered?.closest || isExcluded(hovered)) return
-    const block = postBody(hovered) || hovered.closest('p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote')
+    const block = eligibleBlock(hovered)
     if (!block || pendingHover.has(block) || entries.has(block)) return
     const group = sourceNodes('zh').find(item => item.block === block)
     if (!group) return
