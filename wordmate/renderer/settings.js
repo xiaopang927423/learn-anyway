@@ -1,7 +1,8 @@
 const $ = id => document.getElementById(id)
 let messageSeq = 0
 let savedForm = null
-const snapshot = () => JSON.stringify([...document.querySelectorAll('.form-card input')].map(el => [el.id, el.type === 'checkbox' ? el.checked : el.value]))
+let savedThinking = null
+const snapshot = () => JSON.stringify([...document.querySelectorAll('.form-card input, .form-card select')].map(el => [el.id, el.type === 'checkbox' ? el.checked : el.value]))
 function message(text, error = false) {
   messageSeq++
   $('msg').textContent = text
@@ -11,6 +12,7 @@ function formValues() {
   const count = Number($('dictationCount').value)
   if (!Number.isInteger(count) || count < 0 || count > 200) throw new Error('每轮默写词数须为 0–200 的整数')
   return { baseUrl: $('baseUrl').value.trim().replace(/\/+$/, ''), apiKey: $('apiKey').value.trim(),
+    thinkingEnabled: $('thinkingEnabled').checked, thinkingParameter: $('thinkingParameter').value,
     model: $('model').value.trim() || 'qwen-turbo', remindTime: $('remindTime').value || '20:00',
     notifyEnabled: $('notifyEnabled').checked, autoAdd: $('autoAdd').checked,
     dictationCount: count, dictationAffectsSchedule: $('dictationAffectsSchedule').checked }
@@ -20,15 +22,18 @@ async function load() {
     const s = await wm.getSettings()
     for (const field of ['baseUrl','apiKey','model','remindTime']) $(field).value = s[field] || ''
     for (const field of ['notifyEnabled','autoAdd','dictationAffectsSchedule']) $(field).checked = s[field] !== false
+    $('thinkingEnabled').checked = s.thinkingEnabled === true
+    $('thinkingParameter').value = s.thinkingParameter || 'auto'
     $('dictationCount').value = s.dictationCount ?? 10
     $('provider').value = s.model === 'diffu' ? 'diffu' : 'custom'
     $('provider').dataset.previous = $('provider').value
     savedForm = snapshot()
+    savedThinking = { enabled: $('thinkingEnabled').checked, parameter: $('thinkingParameter').value }
     await integrations()
   } catch (error) { message('加载失败：' + error.message, true) }
 }
 $('save').onclick = () => ui.run($('save'), async () => {
-  try { await wm.saveSettings(formValues()); savedForm = snapshot(); message('✓ 已保存') }
+  try { await wm.saveSettings(formValues()); savedForm = snapshot(); savedThinking = { enabled: $('thinkingEnabled').checked, parameter: $('thinkingParameter').value }; message('✓ 已保存') }
   catch (error) { message('保存失败：' + error.message, true) }
 })
 $('test').onclick = () => ui.run($('test'), async () => {
@@ -91,10 +96,24 @@ window.confirmNavigation = () => {
     dialog.querySelector('[data-choice="discard"]').onclick = async () => { await load(); finish(true) }
     dialog.querySelector('[data-choice="save"]').onclick = async event => {
       event.target.disabled = true
-      try { await wm.saveSettings(formValues()); savedForm = snapshot(); finish(true) }
+      try { await wm.saveSettings(formValues()); savedForm = snapshot(); savedThinking = { enabled: $('thinkingEnabled').checked, parameter: $('thinkingParameter').value }; finish(true) }
       catch (error) { dialog.querySelector('#leave-error').textContent = error.message; event.target.disabled = false }
     }
     document.body.append(dialog); dialog.showModal()
   })
   return navigationPrompt
 }
+
+wm.onDataChanged(async event => {
+  if (event.type !== 'settings' || !savedThinking) return
+  // 外部 Thinking 修改即时显示，但不覆盖正在编辑的 Thinking 草稿。
+  if ($('thinkingEnabled').checked !== savedThinking.enabled || $('thinkingParameter').value !== savedThinking.parameter) return
+  try {
+    const settings = await wm.getSettings()
+    if ($('thinkingEnabled').checked !== savedThinking.enabled || $('thinkingParameter').value !== savedThinking.parameter) return
+    $('thinkingEnabled').checked = settings.thinkingEnabled === true
+    $('thinkingParameter').value = settings.thinkingParameter || 'auto'
+    savedThinking = { enabled: $('thinkingEnabled').checked, parameter: $('thinkingParameter').value }
+    if (savedForm) savedForm = JSON.stringify(JSON.parse(savedForm).map(([id,value]) => [id, id === 'thinkingEnabled' ? savedThinking.enabled : id === 'thinkingParameter' ? savedThinking.parameter : value]))
+  } catch (error) { message('同步 Thinking 失败：' + error.message,true) }
+})

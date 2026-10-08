@@ -6,10 +6,11 @@
   Object.assign(host.style, { position: 'fixed', zIndex: '2147483647', top: '16px', right: '16px', width: 'min(370px, calc(100vw - 24px))', fontSize: '14px' })
   const shadow = host.attachShadow({ mode: 'closed' })
   const style = document.createElement('style')
-  style.textContent = `:host{all:initial}*{box-sizing:border-box}.panel{font:14px/1.6 system-ui,-apple-system,sans-serif;color:#182235;background:#fff;border:1px solid #dce3ef;border-radius:16px;box-shadow:0 12px 44px #14264230;max-height:75vh;overflow:auto;padding:16px}header{display:flex;align-items:center;justify-content:space-between;gap:8px}h3{margin:0;font-size:16px}.buttons{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}button{font:inherit;background:#f1f5fc;color:#23456b;border:1px solid #dce3ef;border-radius:8px;padding:5px 10px;cursor:pointer}button:hover{background:#e3edff}p{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}.muted{color:#64748b;font-size:12px}.error{color:#b42318}.translation{font-size:16px}.meaning{padding:5px 0;border-bottom:1px solid #edf1f6}button:disabled{opacity:.5;cursor:default}select{font:inherit;padding:4px;border:1px solid #dce3ef;border-radius:6px}`
+  style.textContent = `:host{all:initial}*{box-sizing:border-box}.panel{font:14px/1.6 system-ui,-apple-system,sans-serif;color:#182235;background:#fff;border:1px solid #dce3ef;border-radius:16px;box-shadow:0 12px 44px #14264230;max-height:75vh;overflow:auto;padding:12px}[hidden]{display:none!important}header{display:flex;align-items:center;justify-content:space-between;gap:8px}h3{margin:0;font-size:16px}.buttons{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}button{font:inherit;background:#f1f5fc;color:#23456b;border:1px solid #dce3ef;border-radius:8px;padding:5px 10px;cursor:pointer}button:hover{background:#e3edff}p{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}.muted{color:#64748b;font-size:12px}.error{color:#b42318}.translation{font-size:16px}.meaning{padding:5px 0;border-bottom:1px solid #edf1f6}button:disabled{opacity:.5;cursor:default}header button{font-size:12px;padding:4px 7px}select{font:inherit;padding:4px;border:1px solid #dce3ef;border-radius:6px}`
   shadow.append(style)
   let panel, body, toolbar, viewMode = 'page', lastSelection = null, selectionSeq = 0, pageSeq = 0, pageRunning = false
   const entries = new Map()
+  let readingMode = 'bilingual', currentTarget = 'zh', modeButtons = [], collapseButton, panelCollapsed = false
   let hovered = null, hoverSeq = 0
   const pendingHover = new Set()
   function element(tag, text, className) {
@@ -26,18 +27,34 @@
     const top = Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - 280))
     Object.assign(host.style, { left: left + 'px', right: 'auto', top: top + 'px' })
   }
+  function collapse(value) {
+    panelCollapsed = value
+    body.hidden = value; toolbar.hidden = value
+    if (collapseButton) collapseButton.textContent = value ? '展开' : '收起'
+  }
   function display(title) {
     viewMode = title === '选区翻译' ? 'selection' : 'page'
-    Object.assign(host.style, { top: '16px', right: '16px', left: 'auto' })
+    Object.assign(host.style, { top: viewMode === 'page' ? 'auto' : '16px', bottom: viewMode === 'page' ? '16px' : 'auto', right: '16px', left: 'auto' })
     if (!host.isConnected) document.documentElement.append(host)
     if (panel) panel.remove()
     panel = element('section', null, 'panel'); panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', title)
-    const header = element('header'); header.append(element('h3', title), button('关闭', () => { selectionSeq++; host.remove() }))
+    const header = element('header'); header.append(element('h3', title))
+    collapseButton = viewMode === 'page' ? button('收起', () => collapse(!panelCollapsed)) : null
+    if (collapseButton) header.append(collapseButton)
+    header.append(button('关闭', () => { selectionSeq++; host.remove() }))
     body = element('div'); body.setAttribute('aria-live', 'polite')
     toolbar = element('div', null, 'buttons')
     panel.append(header, body, toolbar); shadow.append(panel)
     // 页面翻译过程中切到选词，也始终保留停止和恢复入口。
+    modeButtons = []
+    if (viewMode === 'page') {
+      for (const [mode, label] of [['bilingual', '双语对照'], ['translated', currentTarget === 'zh' ? '仅中文' : '仅译文']]) {
+        const control = button(label, () => setReadingMode(mode))
+        control.dataset.mode = mode; modeButtons.push(control); toolbar.append(control)
+      }
+    }
     toolbar.append(button('停止翻译', cancelPage), button('恢复原文', restorePage))
+    collapse(false); updateModeButtons()
   }
   function status(text, error = false) {
     body.replaceChildren(element('p', text, error ? 'error' : 'muted'))
@@ -48,11 +65,11 @@
     const range = value.getRangeAt(0)
     const parent = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement
     if (parent?.closest('[data-wordmate-ui]')) return null
-    return { text: value.toString().trim(), context: (parent?.closest('p,li,blockquote,td')?.textContent || '').slice(0,4000), rect: range.getBoundingClientRect() }
+    return { text: value.toString().trim(), context: (parent?.closest('p,li,blockquote,td')?.innerText || '').slice(0,4000), rect: range.getBoundingClientRect() }
   }
   document.addEventListener('contextmenu', () => { lastSelection = selection() }, true)
-  async function translate(text, action, target, context = '') {
-    const response = await chrome.runtime.sendMessage({ type: 'translate-text', action, text, target, context })
+  async function translate(text, action, target, context = '', segments) {
+    const response = await chrome.runtime.sendMessage({ type: 'translate-text', action, text, target, context, segments })
     if (!response?.ok) throw new Error(response?.error || '翻译失败，请确认 WordMate 已运行并安装新版连接')
     return response.result
   }
@@ -76,7 +93,21 @@
         if (phonetic) body.append(element('p', phonetic, 'muted'))
         for (const definition of result.definitions || []) body.append(element('p', `${definition.pos || ''} ${definition.meaning || ''}`, 'meaning'))
         copy = (result.definitions || []).map(d => `${d.pos || ''} ${d.meaning || ''}`).join('\n')
-        body.append(element('p', result.inNotebook ? '✓ 已在生词本' : '是否自动收录由桌面设置决定', 'muted'))
+        const notebookButton = button(result.inNotebook ? '✓ 已收录' : '加入生词本', async event => {
+          const control = event.currentTarget
+          control.disabled = true
+          try {
+            const saved = await translate(text, 'add-word', 'zh', selected?.context || '')
+            result.inNotebook = saved.inNotebook
+            control.textContent = '✓ 已收录'
+          } catch (error) {
+            control.disabled = false
+            body.append(element('p', error.message, 'error'))
+          }
+        })
+        notebookButton.dataset.action = 'add-word'
+        notebookButton.disabled = result.inNotebook === true
+        body.append(notebookButton)
       } else body.append(element('p', result.translation, 'translation'))
       for (const example of (result.examples || []).slice(0,2)) body.append(element('p', `${example.en || ''}\n${example.zh || ''}`, 'muted'))
       if (result.notes) body.append(element('p', result.notes, 'muted'))
@@ -93,70 +124,122 @@
   function cancelPage() { hoverSeq++; pageSeq++; pageRunning = false; if (body) status('已停止，已显示的译文保留；可恢复原文。') }
   function restorePage() {
     cancelPage(); selectionSeq++; hoverSeq++
-    for (const entry of entries.values()) entry.output.remove()
+    for (const entry of entries.values()) removeEntry(entry)
     entries.clear()
     display('网页翻译'); status('已恢复原文。')
   }
   const excluded = 'script,style,noscript,textarea,input,select,option,pre,code,svg,canvas,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[data-wordmate-ui],[data-wordmate-translation]'
+  function updateModeButtons() {
+    for (const control of modeButtons) {
+      control.disabled = control.dataset.mode === readingMode
+      control.setAttribute('aria-pressed', String(control.disabled))
+    }
+  }
+  function expectedText(source) { return readingMode === 'translated' ? source.translated : source.original }
+  function removeEntry(entry) {
+    // 只恢复仍然是本扩展写入的文本，不覆盖网站随后更新的内容。
+    for (const source of entry.sources) if (source.node.isConnected && source.node.textContent === source.translated) source.node.textContent = source.original
+    entry.output.remove()
+  }
+  function reconcileEntries() {
+    for (const [block, entry] of entries) {
+      if (!block.isConnected || entry.sources.some(source => !block.contains(source.node) || source.node.textContent !== expectedText(source))) {
+        removeEntry(entry); entries.delete(block)
+      }
+    }
+  }
+  function setReadingMode(mode) {
+    if (!['bilingual', 'translated'].includes(mode)) return
+    reconcileEntries()
+    readingMode = mode
+    for (const entry of entries.values()) {
+      for (const source of entry.sources) source.node.textContent = mode === 'translated' ? source.translated : source.original
+      entry.output.style.setProperty('display', mode === 'translated' ? 'none' : 'block', 'important')
+    }
+    updateModeButtons()
+    if (viewMode === 'page' && panel?.querySelector('h3') && entries.size) panel.querySelector('h3').textContent = mode === 'bilingual' ? '网页双语对照' : (currentTarget === 'zh' ? '网页仅中文' : '网页仅译文')
+  }
   function sourceNodes(target) {
+    reconcileEntries()
     const groups = new Map()
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
     while (walker.nextNode()) {
-      const node = walker.currentNode, parent = node.parentElement, text = node.textContent.trim()
-      if (!parent || !text || parent.closest(excluded)) continue
+      const node = walker.currentNode, parent = node.parentElement
+      if (!parent || parent.closest(excluded)) continue
+      if (!node.textContent.trim() && !parent.closest('p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,figcaption,dt,dd')) continue
       const computed = getComputedStyle(parent)
       if (computed.display === 'none' || computed.visibility === 'hidden' || !parent.getClientRects().length) continue
       const block = parent.closest('p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,figcaption,dt,dd') || parent.closest('button,a,div') || parent
+      if (entries.has(block)) continue
       if (!groups.has(block)) groups.set(block, [])
       groups.get(block).push(node)
     }
     return [...groups].map(([block, nodes]) => ({ block, nodes, text: nodes.map(node => node.textContent).join('') }))
-      .filter(group => {
-        const previous = entries.get(group.block)
-        if (previous?.original === group.text && previous.target === target) return false
-        if (previous) { previous.output.remove(); entries.delete(group.block) }
-        return target === 'zh' ? /[A-Za-z]{2}/.test(group.text) : /[\u3400-\u9fff]/.test(group.text)
-      })
+      .filter(group => target === 'zh' ? /[A-Za-z]{2}/.test(group.text) : /[\u3400-\u9fff]/.test(group.text))
   }
-  function parts(text, limit = 4000) {
-    const chunks = []
-    while (text.length > limit) {
-      let split = text.lastIndexOf(' ', limit)
-      if (split < limit / 2) split = limit
-      chunks.push(text.slice(0, split)); text = text.slice(split)
+  function packets(group) {
+    const result = [], fragments = []
+    group.nodes.forEach((node, index) => {
+      const text = node.textContent
+      if (!text) { fragments.push({ index, text: '' }); return }
+      for (let offset = 0; offset < text.length; offset += 4000) fragments.push({ index, text: text.slice(offset, offset + 4000) })
+    })
+    let packet = [], length = 0
+    for (const fragment of fragments) {
+      if (packet.length && (length + fragment.text.length > 4000 || packet.length >= 64)) { result.push(packet); packet = []; length = 0 }
+      packet.push(fragment); length += fragment.text.length
     }
-    if (text) chunks.push(text)
-    return chunks
+    if (packet.length) result.push(packet)
+    return result
+  }
+  async function translateGroup(group, target, valid) {
+    const sources = group.nodes.map(node => ({ node, original: node.textContent, translated: '' }))
+    for (const packet of packets(group)) {
+      if (!valid()) return null
+      const fragments = packet.map(fragment => fragment.text)
+      // 空白片段直接保留，不向模型发送空文本。
+      if (!fragments.join('').trim()) { for (const fragment of packet) sources[fragment.index].translated += fragment.text; continue }
+      const result = await translate(fragments.join(''), 'page', target, '', fragments)
+      if (!Array.isArray(result.segments) || result.segments.length !== fragments.length) throw new Error('译文缺少排版片段，请重试或更新桌面应用')
+      result.segments.forEach((text, index) => { sources[packet[index].index].translated += text })
+    }
+    if (!valid() || !group.block.isConnected || sources.some(source => !group.block.contains(source.node) || source.node.textContent !== source.original)) return null
+    return { sources, translation: sources.map(source => source.translated).join('') }
+  }
+  function insertEntry(group, translated, target) {
+    if (entries.has(group.block)) return
+    const output = element('span', translated.translation)
+    output.dataset.wordmateTranslation = 'true'; output.lang = target === 'en' ? 'en' : 'zh-CN'
+    output.style.cssText = 'display:block!important;color:inherit!important;background:transparent!important;opacity:1!important;font:inherit!important;line-height:1.7!important;text-align:inherit!important;padding:6px 0 0!important;margin:6px 0 0!important;border:0!important;border-top:1px solid color-mix(in srgb,currentColor 14%,transparent)!important;white-space:normal!important;overflow-wrap:anywhere!important;letter-spacing:normal!important;'
+    if (/^H[1-6]$/.test(group.block.tagName)) output.style.setProperty('font-size', '0.88em', 'important')
+    // 译文留在同一个原生段落 / 网格单元内，不新增父布局的独立网格项。
+    group.block.append(output)
+    const entry = { output, target, original: group.text, sources: translated.sources }
+    entries.set(group.block, entry)
+    if (readingMode === 'translated') {
+      for (const source of entry.sources) source.node.textContent = source.translated
+      output.style.setProperty('display', 'none', 'important')
+    }
   }
   async function translatePage(target = 'zh') {
+    currentTarget = target
     if (pageRunning) { selectionSeq++; display('网页翻译'); status('正在翻译当前页面，请等待或先停止。'); return }
     // 切换目标语言时清掉旧译文，以当前原文重新翻译。
     if ([...entries.values()].some(entry => entry.target !== target)) restorePage()
-    selectionSeq++; display('网页双语翻译')
+    selectionSeq++; display(readingMode === 'bilingual' ? '网页双语对照' : (target === 'zh' ? '网页仅中文' : '网页仅译文'))
     const nodes = sourceNodes(target), seq = ++pageSeq
     if (!nodes.length) { status(entries.size ? '当前页面已经翻译完成。' : '未找到可翻译的可见文字。图片、代码、表单和未加载内容不翻译。'); return }
     pageRunning = true
     let next = 0, finished = 0, failures = 0, firstError = '', abort = false
-    const renderProgress = () => { if (seq === pageSeq && viewMode === 'page') status(`已翻译 ${finished} / ${nodes.length} 处${failures ? `，${failures} 处失败` : ''}。原文保留，译文显示在原文旁。`) }
+    const renderProgress = () => { if (seq === pageSeq && viewMode === 'page') status(`已翻译 ${finished} / ${nodes.length} 处${failures ? `，${failures} 处失败` : ''}。${readingMode === 'bilingual' ? '逐段双语对照' : '仅译文阅读'}。`) }
     renderProgress()
     async function worker() {
       while (next < nodes.length && seq === pageSeq && !abort) {
         const group = nodes[next++], node = group.block, original = group.text
         try {
-          const translated = []
-          for (const part of parts(original.trim())) {
-            if (seq !== pageSeq || abort) return
-            const result = await translate(part, 'page', target)
-            translated.push(result.translation)
-          }
-          if (seq !== pageSeq || entries.has(node) || !node.isConnected || group.nodes.map(source => source.textContent).join('') !== original) continue
-          const output = element('span', translated.join(' '))
-          output.dataset.wordmateTranslation = 'true'; output.lang = target === 'en' ? 'en' : 'zh-CN'
-          // 使用 DOM 文本，绝不把模型响应当作网页 HTML 执行。
-          output.style.cssText = 'display:block!important;color:inherit!important;opacity:0.85!important;background:transparent!important;font-size:0.98em!important;line-height:1.75!important;padding:2px 0!important;margin:6px 0 12px!important;border:none!important;white-space:pre-wrap!important;'
-          if (node.matches('td,th,li,button,a')) node.append(output)
-          else node.after(output)
-          entries.set(node, { output, target, original }); finished++
+          const translated = await translateGroup(group, target, () => seq === pageSeq && !abort)
+          if (!translated || seq !== pageSeq || entries.has(node)) continue
+          insertEntry(group, translated, target); finished++
         } catch (error) {
           if (seq !== pageSeq) return
           failures++; firstError ||= error.message
@@ -172,6 +255,7 @@
     if (viewMode !== 'page') return
     status(`翻译完成：${finished} 处成功${failures ? `，${failures} 处失败：${firstError}` : ''}${abort ? '；后续内容未翻译，请修复连接后重试。' : ''}。`, failures > 0)
     toolbar.prepend(button(failures || abort ? '重试未完成内容' : '翻译新加载内容', () => translatePage(target)))
+    if (!failures && !abort) collapse(true)
   }
   // 激活当前页后，划词出现轻量入口，不在每次选区变化时自动调用模型。
   const chipHost = document.createElement('div')
@@ -203,19 +287,17 @@
     const seq = hoverSeq
     pendingHover.add(block)
     try {
-      const translations = []
-      for (const part of parts(group.text)) translations.push((await translate(part, 'page', 'zh')).translation)
-      if (seq !== hoverSeq || entries.has(block) || !block.isConnected || group.nodes.map(node => node.textContent).join('') !== group.text) return
-      const output = element('span', translations.join(' '))
-      output.dataset.wordmateTranslation = 'true'
-      output.style.cssText = 'display:block!important;color:inherit!important;opacity:.85!important;line-height:1.75!important;margin:6px 0 12px!important;white-space:pre-wrap!important;'
-      if (block.matches('li,td,th')) block.append(output); else block.after(output)
-      entries.set(block, { output, target:'zh', original:group.text })
+      const translated = await translateGroup(group, 'zh', () => seq === hoverSeq)
+      if (!translated || seq !== hoverSeq || entries.has(block)) return
+      insertEntry(group, translated, 'zh')
     } catch (error) { display('段落翻译'); status(error.message,true) }
     finally { pendingHover.delete(block) }
   })
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (!message?.command) return false
+    if (message.command === 'get-state') { respond({ ok: true, state: { readingMode, target: currentTarget } }); return false }
+    if (message.readingMode) setReadingMode(message.readingMode)
+    if (message.command === 'mode') { respond({ ok: true }); return false }
     if (message.command === 'activate') { display('WordMate 双语阅读'); status('已启用当前页：选中文字后点击翻译按钮；鼠标停在段落上按 Shift 可只翻译该段。') }
     else if (message.command === 'selection') translateSelection(message.text).catch(error => { display('翻译失败'); status(error.message, true) })
     else if (message.command === 'page') translatePage(message.target).catch(error => { pageRunning = false; display('翻译失败'); status(error.message, true) })

@@ -422,7 +422,7 @@ app.whenReady().then(() => {
   }
 
   if (!process.env.WM_TEST_SUITE) maintenance()
-  powerMonitor.on('resume', maintenance)
+  powerMonitor.on('resume', () => maintenance())
   // 浏览器按需启动桌面后端时保持浏览器焦点。
   if (!process.argv.includes('--browser-background')) open('lookup')
 

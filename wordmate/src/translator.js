@@ -33,8 +33,8 @@ async function lookup(rawInput, context) {
   }
 
   // 模型、上下文和原始大小写均参与缓存键，避免切模型或换语境仍返回旧结果。
-  const cacheKey = 'v2:' + require('crypto').createHash('sha256')
-    .update(JSON.stringify([input, String(context || ''), settings.baseUrl, settings.model])).digest('hex')
+  const cacheKey = 'v3:' + require('crypto').createHash('sha256')
+    .update(JSON.stringify([input, String(context || ''), settings.baseUrl, settings.model, settings.thinkingEnabled === true, settings.thinkingParameter || 'auto'])).digest('hex')
 
   // 1) 本地缓存：查过就秒出（句子翻译结果同样缓存）
   const cached = db.getCache(cacheKey)

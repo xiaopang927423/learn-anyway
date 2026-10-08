@@ -3,12 +3,14 @@
 import json, pathlib, socket, struct, subprocess, sys, time
 
 def translate(message):
-    if message.get('action', 'selection') not in ('selection', 'page'):
+    action = message.get('action', 'selection')
+    if action not in ('selection', 'page', 'add-word', 'get-preferences', 'set-preferences'):
         raise ValueError('不支持的操作')
-    text = message.get('text')
-    if not isinstance(text, str) or not text.strip() or len(text) > 12000:
-        raise ValueError('请选择 1–12000 字符的文本')
-    message['action'] = message.get('action', 'selection')
+    if action not in ('get-preferences', 'set-preferences'):
+        text = message.get('text')
+        if not isinstance(text, str) or not text.strip() or len(text) > 12000:
+            raise ValueError('请选择 1–12000 字符的文本')
+    message['action'] = action
     endpoint = pathlib.Path.home() / 'Library/Application Support/WordMate/browser.sock'
     client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     client.settimeout(55)

@@ -1,15 +1,46 @@
+const $ = id => document.getElementById(id)
+async function pageCommand(command) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  if (!tab?.id) throw new Error('请先打开一个网页')
+  const response = await chrome.runtime.sendMessage({ type: 'command', command, tabId: tab.id, target: $('target').value, readingMode: $('readingMode').value })
+  if (!response?.ok) throw new Error(response?.error || '无法打开网页翻译')
+  return response
+}
 for (const command of ['activate','page','selection','cancel','restore']) {
-  document.getElementById(command).onclick = async event => {
-    event.target.disabled = true
-    const status = document.getElementById('status')
-    status.textContent = ''
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-      if (!tab?.id) throw new Error('请先打开一个网页')
-      const response = await chrome.runtime.sendMessage({ type: 'command', command, tabId: tab.id, target: document.getElementById('target').value })
-      if (!response?.ok) throw new Error(response?.error || '无法打开网页翻译')
-      window.close()
-    } catch (error) { status.textContent = error.message }
+  $(command).onclick = async event => {
+    event.target.disabled = true; $('status').textContent = ''
+    try { await pageCommand(command); window.close() }
+    catch (error) { $('status').textContent = error.message }
     finally { event.target.disabled = false }
   }
 }
+$('readingMode').onchange = async () => {
+  try { await pageCommand('mode'); $('status').textContent = '' }
+  catch (error) { $('status').textContent = error.message }
+}
+$('thinkingEnabled').onchange = async event => {
+  const control = event.target, requested = control.checked
+  control.disabled = true
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'preferences', thinkingEnabled: requested })
+    if (!response?.ok) throw new Error(response?.error || '设置未保存')
+    control.checked = response.result.thinkingEnabled
+    $('status').textContent = requested ? '已开启深度思考' : '已关闭深度思考'
+  } catch (error) { control.checked = !requested; $('status').textContent = error.message }
+  finally { control.disabled = false }
+}
+async function loadPreferences() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'preferences' })
+    if (!response?.ok) throw new Error(response?.error || '无法连接新版 WordMate')
+    $('thinkingEnabled').checked = response.result.thinkingEnabled
+    $('thinkingEnabled').disabled = false
+  } catch (error) { $('status').textContent = error.message }
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+    if (!tab?.id) return
+    const response = await chrome.runtime.sendMessage({ type: 'command', command: 'get-state', tabId: tab.id })
+    if (response?.state) { $('readingMode').value = response.state.readingMode; $('target').value = response.state.target }
+  } catch { /* 浏览器禁止注入时保留默认选项，由操作时显示提示 */ }
+}
+loadPreferences()

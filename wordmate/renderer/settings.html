@@ -29,6 +29,9 @@
       <option value="qwen-max"></option>
     </datalist>
 
+    <label class="switch-row"><input id="thinkingEnabled" type="checkbox"> 开启 Thinking（深度思考，默认关闭）</label>
+    <label for="thinkingParameter">Thinking 接口适配</label>
+    <select id="thinkingParameter"><option value="auto">自动识别 Diffu / Qwen</option><option value="chat_template_kwargs">chat_template_kwargs（vLLM / Qwen）</option><option value="enable_thinking">enable_thinking（DashScope）</option><option value="none">接口自行控制（不发送开关）</option></select>
     <label for="remindTime">每日提醒时间</label>
     <input id="remindTime" type="time">
 

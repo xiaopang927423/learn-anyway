@@ -5,22 +5,41 @@ const script=fs.readFileSync(path.join(__dirname,'../browser-extension/content.j
 let checks=0
 function check(value,label){assert.ok(value,label);checks++;console.log('PASS',label)}
 app.whenReady().then(async()=>{
- const win=new BrowserWindow({width:1100,height:800,show:false,webPreferences:{contextIsolation:true,nodeIntegration:false}})
+ const win=new BrowserWindow({width:1100,height:800,show:false,webPreferences:{contextIsolation:true,nodeIntegration:false,backgroundThrottling:false}})
  const fixture=`<!doctype html><html><meta charset=utf-8><body style="font:18px/1.8 system-ui;max-width:700px;margin:70px auto"><h1>Workplace English</h1><p id=sentence>Please <strong>check</strong> the <a href=https://example.com id=link>project</a> timeline.</p><p id=second>The team will streamline the workflow.</p><p style=display:none>Hidden private text</p><input value="Private form"><div contenteditable=true>Editable draft</div><pre>const apiKey = 'private';</pre><p id=long></p></body></html>`
  await win.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(fixture))
  const run=code=>win.webContents.executeJavaScript(code)
  async function until(code){const stop=Date.now()+6000;while(Date.now()<stop){if(await run(code))return;await new Promise(r=>setTimeout(r,25))}throw Error('Timeout: '+code)}
  try{
-  await run(`window.testRequests=[];window.listener=null;window.failure=false;window.delay=0;window.wordResult=false;window.panels=[];
+  await run(`window.testRequests=[];window.listener=null;window.failure=false;window.delay=0;window.wordResult=false;window.collected=false;window.panels=[];
     const originalAttach = Element.prototype.attachShadow;
     Element.prototype.attachShadow=function(options){const root=originalAttach.call(this,options);window.panels.push(root);return root};
-    window.chrome={runtime:{onMessage:{addListener:fn=>window.listener=fn},sendMessage:async message=>{window.testRequests.push(message);if(window.delay)await new Promise(r=>setTimeout(r,window.delay));return window.failure ? {ok:false,error:'连接失败'}:{ok:true,result:window.wordResult?{type:'word',word:message.text,definitions:[{pos:'n.',meaning:'<img src=x onerror=alert(1)> 安全释义'}]}:{type:'sentence',translation:'译文：'+message.text}}}}};true`)
+    window.fixtureSegments=parts=>{const text=parts.join('');if(text==='Workplace English')return ['职场英语'];if(text==='Please check the project timeline.')return ['请','检查','','项目','时间表。'];if(text==='The team will streamline the workflow.')return ['团队将简化工作流程。'];if(text==='Updated page content.')return ['页面内容已更新。'];return parts.map(part=>'中：'+part)};
+    window.chrome={runtime:{onMessage:{addListener:fn=>window.listener=fn},sendMessage:async message=>{window.testRequests.push(message);if(message.action==='add-word'){window.collected=true;return {ok:true,result:{inNotebook:true}}}if(window.delay)await new Promise(r=>setTimeout(r,window.delay));return window.failure ? {ok:false,error:'连接失败'}:{ok:true,result:window.wordResult?{type:'word',word:message.text,inNotebook:window.collected,definitions:[{pos:'n.',meaning:'<img src=x onerror=alert(1)> 安全释义'}]}:{type:'sentence',translation:'译文：'+message.text,segments:message.segments ? window.fixtureSegments(message.segments) : undefined}}}}};true`)
   await run(script)
   await run("window.listener({command:'page',target:'zh'},null,()=>{});true")
   await until("document.querySelectorAll('[data-wordmate-translation]').length===3")
   check(await run("testRequests.some(r=>r.text==='Please check the project timeline.')"),'inline emphasis and links translated as a complete paragraph')
   check(await run("!testRequests.some(r=>/Hidden|Private|Editable|apiKey/.test(r.text))"),'hidden text, forms, editable drafts and code excluded')
-  check(await run("document.getElementById('link').getAttribute('href')==='https://example.com' && document.getElementById('sentence').textContent==='Please check the project timeline.'"),'original markup, text and links preserved')
+  check(await run("document.getElementById('link').getAttribute('href')==='https://example.com' && document.getElementById('sentence').firstChild.textContent==='Please '"),'original markup, text and links preserved')
+  check(await run("document.getElementById('sentence').querySelector('[data-wordmate-translation]')!==null"),'bilingual pair stays in the same native paragraph')
+  fs.mkdirSync(path.join(__dirname,'../test-artifacts'),{recursive:true})
+  await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
+  fs.writeFileSync(path.join(__dirname,'../test-artifacts/browser-bilingual.png'),(await win.webContents.capturePage()).toPNG())
+  const countBeforeModes=await run('testRequests.length')
+  await run("window.listener({command:'mode',readingMode:'translated'},null,()=>{});true")
+  check(await run("document.getElementById('link').textContent==='项目' && document.getElementById('link').getAttribute('href')==='https://example.com'"),'Chinese-only mode replaces link text while retaining destination')
+  check(await run("getComputedStyle(document.getElementById('sentence').querySelector('[data-wordmate-translation]')).display==='none'"),'Chinese-only mode does not show duplicate bilingual row')
+  fs.mkdirSync(path.join(__dirname,'../test-artifacts'),{recursive:true})
+  await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
+  fs.writeFileSync(path.join(__dirname,'../test-artifacts/browser-chinese-only.png'),(await win.webContents.capturePage()).toPNG())
+  await run("window.listener({command:'mode',readingMode:'bilingual'},null,()=>{});true")
+  check(await run("document.getElementById('link').textContent==='project' && document.getElementById('sentence').firstChild.textContent==='Please '"),'switch back restores original inline text and emphasis')
+  check(await run('testRequests.length')===countBeforeModes,'reading mode switch does not call the model again')
+  await run("window.listener({command:'mode',readingMode:'translated'},null,()=>{});document.getElementById('second').firstChild.textContent='Website updated its own text.';window.listener({command:'restore'},null,()=>{});true")
+  check(await run("document.getElementById('second').textContent==='Website updated its own text.' && document.getElementById('link').textContent==='project'"),'restore in Chinese-only mode preserves website updates and restores untouched links')
+  await run("document.getElementById('second').textContent='The team will streamline the workflow.';window.listener({command:'page',target:'zh',readingMode:'bilingual'},null,()=>{});true")
+  await until("document.querySelectorAll('[data-wordmate-translation]').length===3")
   const before=await run('testRequests.length')
   await run("window.listener({command:'page',target:'zh'},null,()=>{});true")
   check(await run('testRequests.length')===before,'already translated nodes are not billed again')
@@ -33,6 +52,10 @@ app.whenReady().then(async()=>{
   await until("panels[0].textContent.includes('安全释义')")
   check(await run("panels[0].querySelectorAll('img').length===0"),'model response is rendered as text, not executed HTML')
   check(await run("panels[0].textContent.includes('timeline')"),'selected word renders inside webpage overlay')
+  await run("panels[0].querySelector('[data-action=add-word]').click();true")
+  await until("panels[0].querySelector('[data-action=add-word]').textContent.includes('已收录')")
+  check(await run("panels[0].querySelector('[data-action=add-word]').disabled && testRequests.some(request=>request.action==='add-word')"),'selected word can be explicitly added and becomes collected')
+
   await run("const range=document.createRange();range.selectNodeContents(document.getElementById('link'));window.getSelection().removeAllRanges();window.getSelection().addRange(range);document.getElementById('link').dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));true")
   check(await run("!!document.querySelector('[data-wordmate-ui=selection-entry]')"),'selecting text shows a nearby translation entry')
   await run("panels[1].querySelector('button').click();true")

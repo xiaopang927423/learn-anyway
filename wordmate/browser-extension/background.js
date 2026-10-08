@@ -17,9 +17,9 @@ function nativeTranslate(message) {
     port.postMessage(message)
   })
 }
-async function command(tabId, name, text = '', target = 'zh', frameId = 0) {
+async function command(tabId, name, text = '', target = 'zh', frameId = 0, readingMode) {
   await chrome.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, files: ['content.js'] })
-  return chrome.tabs.sendMessage(tabId, { command: name, text, target }, { frameId })
+  return chrome.tabs.sendMessage(tabId, { command: name, text, target, readingMode }, { frameId })
 }
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
@@ -40,12 +40,17 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 })
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (message?.type === 'translate-text' && sender.tab) {
-    nativeTranslate({ action: message.action, text: message.text, context: message.context || '', target: message.target || 'zh' })
+    nativeTranslate({ action: message.action, text: message.text, context: message.context || '', target: message.target || 'zh', segments: message.segments })
+      .then(result => respond({ ok: true, result }), error => respond({ ok: false, error: error.message }))
+    return true
+  }
+  if (message?.type === 'preferences' && !sender.tab) {
+    nativeTranslate({ action: message.thinkingEnabled == null ? 'get-preferences' : 'set-preferences', thinkingEnabled: message.thinkingEnabled })
       .then(result => respond({ ok: true, result }), error => respond({ ok: false, error: error.message }))
     return true
   }
   if (message?.type === 'command' && !sender.tab) {
-    command(message.tabId, message.command, '', message.target || 'zh')
+    command(message.tabId, message.command, '', message.target || 'zh', 0, message.readingMode)
       .then(result => respond(result), error => respond({ ok: false, error: '该页面不能翻译（浏览器内置页、扩展商店和部分 PDF 不允许注入）。' }))
     return true
   }
