@@ -128,7 +128,7 @@
     entries.clear()
     display('网页翻译'); status('已恢复原文。')
   }
-  const excluded = 'script,style,noscript,textarea,input,select,option,pre,code,svg,canvas,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[data-wordmate-ui],[data-wordmate-translation]'
+  const excluded = 'script,style,noscript,textarea,input,select,option,pre,code,svg,canvas,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[data-wordmate-ui],[data-wordmate-translation],nav,header,footer,aside,button,[role=button],[role=tab],[role=menu],[role=toolbar],[role=navigation],[role=tree],[role=grid],[role=row],time'
   function updateModeButtons() {
     for (const control of modeButtons) {
       control.disabled = control.dataset.mode === readingMode
@@ -159,9 +159,36 @@
     updateModeButtons()
     if (viewMode === 'page' && panel?.querySelector('h3') && entries.size) panel.querySelector('h3').textContent = mode === 'bilingual' ? '网页双语对照' : (currentTarget === 'zh' ? '网页仅中文' : '网页仅译文')
   }
+  const proseSelector = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,figcaption,dt,dd,td,th'
+  function readingRoots() {
+    // 优先文档 / 文章正文；例如仓库页面中的 README，而不是整个文件浏览器。
+    const articles = [...document.querySelectorAll('.markdown-body,article,[role=article]')]
+      .filter(root => !root.closest(excluded) && root.getClientRects().length)
+    if (articles.length) return articles.filter(root => !articles.some(other => other !== root && other.contains(root)))
+    return [document.querySelector('main,[role=main]') || document.body]
+  }
+  function protectedText(text) {
+    const value = text.trim()
+    return /^\.?[\w@.-]+(?:\/[\w@.-]+)+$/.test(value) || /^\.[\w.-]+$/.test(value) ||
+      /^[A-Z][a-z]+(?:[A-Z][A-Za-z0-9]*)+$/.test(value) || /^[a-f0-9]{7,40}$/i.test(value) || /^#[0-9]+$/.test(value) ||
+      /^\d+\s+(?:branches?|tags?|commits?|hours?|days?|weeks?|months?|years?)(?:\s+ago)?$/i.test(value) ||
+      /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(value)
+  }
+  function eligibleBlock(parent, roots) {
+    const block = parent.closest(proseSelector)
+    if (!block || block.closest(excluded) || !roots.some(root => root.contains(block))) return null
+    // 正文外的文件表格、导航链接列表、徽章和可点击整行不是阅读段落。
+    const article = block.closest('.markdown-body,article,[role=article]')
+    if (article && block.tagName === 'H1' && article.querySelector('h1') === block && /^[A-Za-z0-9_.-]+$/.test(block.textContent.trim())) return null
+    if (!article && block.closest('table,[role=listbox]')) return null
+    if (block.matches('li') && !block.querySelector('p') && block.querySelector('a') && block.textContent.trim().split(/\s+/).length < 5) return null
+    const computed = getComputedStyle(block)
+    if (computed.display === 'flex' || computed.display === 'inline-flex' || computed.display === 'grid' || computed.display === 'inline-grid' || computed.whiteSpace === 'nowrap') return null
+    return block
+  }
   function sourceNodes(target) {
     reconcileEntries()
-    const groups = new Map()
+    const groups = new Map(), roots = readingRoots()
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
     while (walker.nextNode()) {
       const node = walker.currentNode, parent = node.parentElement
@@ -169,12 +196,13 @@
       if (!node.textContent.trim() && !parent.closest('p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,figcaption,dt,dd')) continue
       const computed = getComputedStyle(parent)
       if (computed.display === 'none' || computed.visibility === 'hidden' || !parent.getClientRects().length) continue
-      const block = parent.closest('p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,figcaption,dt,dd') || parent.closest('button,a,div') || parent
-      if (entries.has(block)) continue
+      const block = eligibleBlock(parent, roots)
+      if (!block || entries.has(block)) continue
       if (!groups.has(block)) groups.set(block, [])
       groups.get(block).push(node)
     }
     return [...groups].map(([block, nodes]) => ({ block, nodes, text: nodes.map(node => node.textContent).join('') }))
+      .filter(group => !protectedText(group.text))
       .filter(group => target === 'zh' ? /[A-Za-z]{2}/.test(group.text) : /[\u3400-\u9fff]/.test(group.text))
   }
   function packets(group) {
@@ -201,7 +229,7 @@
       if (!fragments.join('').trim()) { for (const fragment of packet) sources[fragment.index].translated += fragment.text; continue }
       const result = await translate(fragments.join(''), 'page', target, '', fragments)
       if (!Array.isArray(result.segments) || result.segments.length !== fragments.length) throw new Error('译文缺少排版片段，请重试或更新桌面应用')
-      result.segments.forEach((text, index) => { sources[packet[index].index].translated += text })
+      result.segments.forEach((text, index) => { const fragment = packet[index]; sources[fragment.index].translated += protectedText(fragment.text) ? fragment.text : text })
     }
     if (!valid() || !group.block.isConnected || sources.some(source => !group.block.contains(source.node) || source.node.textContent !== source.original)) return null
     return { sources, translation: sources.map(source => source.translated).join('') }

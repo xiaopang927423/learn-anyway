@@ -1,6 +1,6 @@
 # WordMate 产品需求文档
 
-版本：v0.4.0 · 更新：2026-10-08 · 平台：macOS + Chrome / Edge / Chromium 扩展
+版本：v0.4.1 · 更新：2026-10-08 · 平台：macOS + Chrome / Edge / Chromium 扩展
 
 ## 目标与范围
 
@@ -84,3 +84,9 @@
 - Thinking 默认关闭。浏览器弹窗与桌面设置共用持久化开关；字典、整页、连接测试都使用该开关。Diffu / Qwen 采用 chat_template_kwargs.enable_thinking，DashScope 用顶层 enable_thinking；其他接口可选择适配字段或自行控制。
 - Thinking 及适配字段参与缓存键。真实 Diffu 关闭测试 reasoning_tokens=0，开启对照测试 reasoning_tokens=365；关闭不是只隐藏思考内容。
 - 划词结果显示「加入生词本」；自动入本已启用时自动收录并显示「已收录」。手动收录保留句子上下文，同词不重复入库；自动入本关闭时仍可主动加入。
+
+## v0.4.1 正文识别与仓库页面布局
+
+整页入口调整为「翻译页面正文」。优先文章、README / markdown 文档；保留导航、操作控件、文件浏览器、仓库名称、提交标识与日期。双语只应用到可阅读语义段落，不对任意 div / a / button 追加第二行，不扩展 flex / grid / nowrap 紧凑控件。无文章容器时使用 main 内语义段落作为回退。
+
+路径、提交哈希和 camelCase 技术名称在正文内保留。被跳过的文字仍可主动划词翻译。该策略也用于仅译文模式，避免改变应用界面的操作语义。
