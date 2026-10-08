@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="search-bar">
+    <textarea id="word" rows="2" maxlength="12000" placeholder="查单词 · 中文问法 · 整句翻译（Shift+回车换行）" autofocus></textarea>
+    <button id="clear" title="清空输入和结果">清空</button>
+    <button id="btn" class="primary" title="查询（回车）">查询</button>
+  </div>
+  <input id="context" type="text" placeholder="上下文句子（可选，让解释更贴切）">
+  <div id="loading" hidden><span class="spinner"></span><span class="muted">AI 正在查词…</span></div>
+  <div id="result">
+    <div class="empty-state">
+      <div class="icon">📖</div>
+      <p>输入<b>英文单词</b>查词典<br>输入<b>中文短语</b>查英文怎么说<br>粘贴<b>整句</b>直接互译</p>
+    </div>
+  </div>
+  <nav class="footer">
+    <a href="#" data-open="notebook">生词本</a>
+    <a href="#" data-open="review">复习</a>
+    <a href="#" data-open="dictation">默写</a>
+    <a href="#" data-open="settings">设置</a>
+  </nav>
+  <div id="toast"></div>
+  <script src="ui.js"></script>
+  <script src="forms.js"></script>
+  <script src="memory.js"></script>
+  <script src="lookup.js"></script>
+</body>
+</html>

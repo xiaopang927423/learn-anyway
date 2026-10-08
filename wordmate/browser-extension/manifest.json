@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "WordMate 网页翻译",
+  "version": "0.3.0",
+  "description": "整页双语翻译、选词和段落翻译，结果直接显示在网页中。",
+  "permissions": [
+    "contextMenus",
+    "nativeMessaging",
+    "activeTab",
+    "scripting"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA95pTta9JHa+Cw+QvGqP8tG66BCvmoFXJdVMLFGC4J+tIcT5eI+GbsFz0Z8z8St20H36GCggNSfN1IQ9qKCDG4vSkljhFKYTJIiiWvn3/8APlaD05ingvCxGsSJRaL3rmrkw+6m3g4xPO73eZLxubC6S3CU7mSL538J4+oOePKwL28OrgjQ7Kv5nXAc2pbkzkMWvob3NeNmuVQFkMfLcw52s1EDRoTPakDizmHkpb8/UY6M9SRTDcaGccrTJeznV0+YB75HaPPL9awXHCM/0iwfrqlxPbfK17d4gEsJB1uVJWZk1yJaantOfz/JqQa88ZraMa+IsQ5J77DMb/jX3OQwIDAQAB",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "WordMate 网页翻译"
+  }
+}

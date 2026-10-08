@@ -1,0 +1,13 @@
+{
+  "name": "wordmate-services",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WordMate 的 macOS 服务菜单原生插件（选中文字右键翻译）",
+  "main": "build/Release/wordmate_services.node",
+  "gypfile": true,
+  "files": [
+    "binding.gyp",
+    "wordmate_services.mm",
+    "build"
+  ]
+}

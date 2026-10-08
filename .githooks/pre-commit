@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+project_root="$(git rev-parse --show-toplevel)"
+npm --prefix "$project_root/wordmate" run lint
+python3 "$project_root/wordmate/scripts/check-staged.py"

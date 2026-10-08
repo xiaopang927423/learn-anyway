@@ -1,0 +1,91 @@
+{
+  "name": "wordmate",
+  "version": "0.3.0",
+  "description": "WordMate —— 工作场景 AI 生词助手（菜单栏查词 + 生词本 + 间隔重复复习）",
+  "main": "main.js",
+  "scripts": {
+    "postinstall": "electron-builder install-app-deps",
+    "start": "electron .",
+    "smoke": "WM_SMOKE=1 electron .",
+    "build:native": "electron-rebuild -f -w wordmate-services",
+    "dist": "npm run build:native && electron-builder --mac dir",
+    "test": "node --test test/*.test.js",
+    "test:integration": "node_modules/.bin/electron scripts/integration-tests.js",
+    "test:browser": "node_modules/.bin/electron scripts/browser-render-tests.js",
+    "lint": "node scripts/check-project.js"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "wordmate-services": "file:./native"
+  },
+  "build": {
+    "appId": "com.qiji.wordmate",
+    "productName": "WordMate",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "renderer/**/*",
+      "assets/**/*"
+    ],
+    "mac": {
+      "target": "dir",
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.education",
+      "extendInfo": {
+        "LSUIElement": true,
+        "NSServices": [
+          {
+            "NSMenuItem": {
+              "default": "用 WordMate 翻译"
+            },
+            "NSMessage": "wordmateTranslate",
+            "NSPortName": "WordMate",
+            "NSSendTypes": [
+              "public.utf8-plain-text",
+              "NSStringPboardType"
+            ],
+            "NSKeyEquivalent": {
+              "default": ""
+            },
+            "NSTimeout": "30000",
+            "NSRequiredContext": {}
+          }
+        ],
+        "NSAppleEventsUsageDescription": "WordMate 在使用划词快捷键时模拟复制选中文本，用于翻译。"
+      }
+    },
+    "protocols": [
+      {
+        "name": "WordMate 翻译",
+        "schemes": [
+          "wordmate"
+        ]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "browser-extension",
+        "to": "browser-extension"
+      },
+      {
+        "from": "scripts",
+        "to": "scripts",
+        "filter": [
+          "browser-host.py",
+          "install-browser-host.py"
+        ]
+      }
+    ]
+  }
+}

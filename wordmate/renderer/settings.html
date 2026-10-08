@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="settings-body">
+  <h1>设置</h1>
+  <p id="integration-status" class="muted" role="status"></p>
+  <div class="btn-row"><button id="browser-install">安装浏览器右键连接</button><button id="accessibility">打开辅助功能设置</button></div>
+
+  <div class="form-card">
+    <label for="provider">模型预设</label>
+    <select id="provider"><option value="custom">当前 / 自定义</option><option value="diffu">Diffu</option><option value="qwen">DashScope Qwen</option></select>
+    <button id="importDiffu">从 package 3 导入 Diffu 配置</button>
+    <p class="muted">导入时选择 config/models.json，密钥保存在本机，不写入代码。</p>
+    <label for="baseUrl">API 地址（OpenAI 兼容接口，留空用 DashScope 默认）</label>
+    <input id="baseUrl" type="text" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1">
+
+    <label for="apiKey">API Key</label>
+    <input id="apiKey" type="password" placeholder="sk-...">
+
+    <label for="model">模型名称（可自定义，如 qwen-turbo / gpt-4o-mini / deepseek-chat）</label>
+    <input id="model" type="text" list="modelPresets" placeholder="qwen-turbo">
+    <datalist id="modelPresets">
+      <option value="qwen-turbo"></option>
+      <option value="qwen-flash"></option>
+      <option value="qwen-plus"></option>
+      <option value="qwen-max"></option>
+    </datalist>
+
+    <label for="remindTime">每日提醒时间</label>
+    <input id="remindTime" type="time">
+
+    <label class="switch-row"><input id="notifyEnabled" type="checkbox"> 开启每日复习提醒</label>
+    <label class="switch-row"><input id="autoAdd" type="checkbox"> 查到的英文单词自动加入生词本</label>
+
+    <label for="dictationCount">每轮默写词数（0 = 全部）</label>
+    <input id="dictationCount" type="number" min="0" max="200" step="1" style="width: 90px">
+    <label class="switch-row"><input id="dictationAffectsSchedule" type="checkbox"> 默写结果计入复习排程（同一词同日只计一次分）</label>
+  </div>
+
+  <div class="settings-actions">
+  <div class="btn-row">
+    <button id="test">测试连接</button>
+    <button id="save" class="primary">保存设置</button>
+  </div>
+  <button id="export" class="big">导出生词本 CSV</button>
+  <p id="msg" class="msg" role="status"></p>
+  </div>
+
+  <p class="muted footnote">
+    离线词典兜底（可选）：从 github.com/skywind3000/ECDICT 下载 ecdict.csv，
+    放到 ~/Library/Application Support/WordMate/ 目录下即可在断网时查词。
+  </p>
+  <script src="ui.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

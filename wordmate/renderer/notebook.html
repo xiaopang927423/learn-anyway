@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>生词本 <span id="stats" class="muted" style="font-size:12px"></span></h1>
+  <input id="search" type="text" placeholder="搜索单词或释义…">
+  <p id="undo-line" hidden><span id="undo-label"></span> <button id="undo">撤销删除</button></p>
+  <div id="list"></div>
+  <dialog id="editor">
+    <form id="edit-form">
+      <h2 id="edit-title">编辑生词</h2>
+      <label for="edit-definitions">释义（每行：词性 | 中文释义）</label><textarea id="edit-definitions" rows="4" required></textarea>
+      <label for="edit-context">上下文</label><textarea id="edit-context" rows="3"></textarea>
+      <label for="edit-examples">例句（每行：英文 | 中文）</label><textarea id="edit-examples" rows="4"></textarea>
+      <label for="edit-memory">记忆法</label><textarea id="edit-memory" rows="3"></textarea>
+      <p id="edit-error" class="msg" role="alert"></p>
+      <div class="btn-row"><button id="edit-cancel" type="button">取消</button><button id="edit-save" class="primary" type="submit">保存</button></div>
+    </form>
+  </dialog>
+  <nav class="footer">
+    <a href="#" data-open="lookup">查词</a>
+    <a href="#" data-open="review">复习</a>
+    <a href="#" data-open="dictation">默写</a>
+    <a href="#" data-open="settings">设置</a>
+  </nav>
+  <script src="ui.js"></script>
+  <script src="forms.js"></script>
+  <script src="memory.js"></script>
+  <script src="notebook.js"></script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+# WordMate —— 工作场景 AI 生词助手
+
+常驻 macOS 菜单栏的查词 + 生词本 + 间隔重复复习应用。
+PRD 见上级目录 `PRD-WordMate.md`。
+
+## 运行
+
+```bash
+npm install        # 首次（若 Electron 下载慢：ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm install）
+npm start
+```
+
+启动后菜单栏出现 **W** 图标：
+
+- 左键点击 / 全局快捷键 **⌥Space** → 呼出查词窗口（Esc 或再点图标收起）
+- 全局快捷键 **⌥D** → 划词查词：在任何软件里选中英文单词按 ⌥D，自动查词、自动入生词本、自动发音
+- 选中文字 → **右键 →「服务」→「用 WordMate 翻译」** → 弹出查词窗：英文单词查词并自动入生词本、句子/中文整句翻译（需打包运行，见「右键取词翻译」）
+- 右键点击（托盘图标） → 菜单（生词本 / 复习 / 默写 / 设置 / 退出）
+- 图标旁的数字 = 今日待复习数
+
+## 查什么都能查
+
+| 输入 | 行为 |
+| --- | --- |
+| 英文单词/短语（如 `estimate`） | 词典：音标、**词形变化**、多词性释义、例句、搭配、辨析，可入生词本 |
+
+| 中文词/短语（如 `估算`、`尽快回复`） | 告诉你最地道的英文说法 + 替代表达 + 用法要点 |
+| 完整句子（中英皆可） | 整句互译 + 要点说明 + **点词入本**（见下） |
+
+## 词形变化
+
+查词时 AI 会给出该词实际存在的完整词形变化，以 🔀 胶囊展示（查词卡、生词本卡片、复习翻面三处同步）：
+
+- **屈折变化**：复数、比较级、最高级、三单、过去式、过去分词、现在分词（不规则变化也给正确形式，如 good→better/best）
+- **派生变化**：副词形式、名词形式、形容词形式、动词形式、指人名词（如 efficient→efficiently/efficiency，teach→teacher）
+
+## 记忆方法与联想链
+
+查词时 AI 还会给出两个记忆辅助（查词卡、生词本卡片、复习翻面三处同步）：
+
+- **🧠 记忆法**：针对该词选一种最有效的记忆钩子——词根词缀拆解、熟词联想、谐音梗、字母形象画面等，给能立刻上手的具体方法，不说"多用多练"这种空话
+- **🔗 联想链**：3~6 个「记一个带一串」的关联词（同词族派生、同词根 cognate、近义/反义、易混词），各带简短释义和与本词的关联；查词窗里点词条可直接跳转查那个词
+
+## 点词入本（句子难词）
+
+翻译整句时，AI 会同时挑出句中最值得记的 3~6 个难词并给出**本句语境下的释义**：
+
+- 句中每个单词都可点击，点一下就查词 + 加入生词本（自动把这个句子存为该词的上下文）
+- AI 难词标红下划线，下方还有带释义的难词胶囊，同样可点击收录
+- 已在生词本的词直接显示为绿色，点击不重复入本
+
+## 右键取词翻译（macOS 服务菜单）
+
+在浏览器、文档、微信等**任意软件**里选中一段文字，**右键 →「服务」→「用 WordMate 翻译」**，即可呼出查词窗：
+
+- 选中的是**英文单词** → 查词 + 自动入生词本（与「设置 → 自动入本」一致）+ 朗读
+- 选中的是**句子 / 中文** → 整句翻译（句子不入库，与查词窗规则一致）
+- 与 **⌥D** 的区别：⌥D 模拟 ⌘C 抓剪贴板、读取完整选中文本；服务菜单直接拿到你的选区，整句 / 中文原样送去翻译，互不干扰剪贴板
+
+底层是 macOS 原生「服务（Service）」：由 `native/` 里的 N-API 插件在启动时调用 `NSRegisterServicesProvider` 注册，选中文字命中后把系统回传的纯文本交给和 ⌥D 相同的查词管线。
+
+> **只在打包后的 `.app` 里生效**。macOS 的「服务」来自 App bundle 的 `Info.plist → NSServices`，`npm start`（源码直跑）看不到菜单项——此时主进程会打印「右键翻译服务未启用」并正常跳过，不影响其它功能。
+>
+> 首次使用前需让系统识别到该服务（原生插件也要按 Electron ABI 编译）：
+>
+> ```bash
+> npm install                 # 会自动 install-app-deps，编译 native/ 插件
+> npm run dist                # 打包出 dist/mac-arm64/WordMate.app
+> mkdir -p ~/Applications
+> ditto dist/mac-arm64/WordMate.app ~/Applications/WordMate.app
+> open ~/Applications/WordMate.app
+> /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+>   -f ~/Applications/WordMate.app   # 若右键「服务」里暂时没出现，手动注册一次；重开应用/重登通常也会刷新
+> ```
+>
+> 之后在别的应用选中文字右键即可。改过 `native/` 或 `NSServices` 配置后重新 `npm run dist` 生效。
+
+## 复习优先级
+
+- 每次查词都会给该词记 1 次「查询次数」——查得越多 = 越记不住
+- 队列排序：`查询次数 × 2 + 距上次复习的天数`，难词和久未复习的词先出现
+- 复习卡片和生词本会显示「查过 N 次 · 难词」
+
+## 首次配置
+
+打开「设置」→ 填入 API 地址（可选）和 API Key → 保存。
+
+- 默认走阿里云百炼（DashScope），Key 到 https://bailian.console.aliyun.com/ 创建
+- **API 可自定义**：任何 OpenAI 兼容接口都支持（如 DeepSeek、OpenAI、本地 Ollama），
+  填入 Base URL（如 `https://api.deepseek.com/v1`）和对应模型名即可
+
+## 查词与句子翻译
+
+输入框支持两种内容，AI 自动识别：
+
+- **单词/短语**：返回音标、释义、例句、搭配、近义词辨析，可加入生词本
+- **完整句子（中英皆可）**：直接给出译文 + 用法要点说明（不加入生词本）
+
+查询优先级：
+
+1. 本地缓存（查过的内容秒出）
+2. 云端 AI（自定义模型）
+3. 本地词典兜底（仅单词，可选，见下）
+
+## 离线词典兜底（可选）
+
+1. 到 https://github.com/skywind3000/ECDICT 下载 `ecdict.csv`（约 200MB）
+2. 放到 `~/Library/Application Support/WordMate/ecdict.csv`
+3. 重启应用。断网或 AI 失败时自动用它给出基本释义
+
+## 复习规则（简化 SM-2）
+
+- 卡片正面：单词 + 上下文（词被挖空）；空格翻面
+- 自评：`1` 不认识（10 分钟后再来）／ `2` 模糊（间隔 ×1.5）／ `3` 认识（间隔 ×2.2）
+- 连续 3 次「认识」且间隔 ≥ 21 天 → 建议标记已掌握
+- 无每日新词上限，查了多少就能复习多少
+
+## 默写（看义写词）
+
+复习考「认得出」，默写考「拼得出」——后者才是写邮件时真正的关卡。入口：托盘菜单「默写一组」/ 页脚「默写」/ 复习完成页「趁热默写一组」。
+
+- 出题：中文释义 + 例句挖空（优先含目标词的例句），纯本地字符串比对判分，**断网也能用**
+- 判定归一化：忽略大小写/空格/连字符（`well known` ≡ `well-known`）
+- 答错不是整词红掉，而是**字符级 diff**：标出写错、多写、漏写的具体字母（recie**v**e → 绿色提示该位是 c）
+- **一次重试 + 渐进提示**：首错给首字母 + 词长提示（`r _ _ _ _ _`）；再错或点「不会」揭晓答案，自动播发音并展示该词的 🧠 记忆法和 🔗 联想链
+- 错词本轮结束自动重考一遍；结算报告给出「一次对 / 重试对 / 错」分布和错词清单（含当时的错误拼写，方便复盘错因）
+- **与复习排程联动**（可在设置关闭）：一次对 = 认识，重试对 = 模糊，错 = 不认识；同一词同日只计一次分，默写和复习不会互相双倍奖惩
+- 队列与复习共享：到期词 + 新词按难词优先排序，排除当天已复习/已默写过的词；每轮词数在设置里调整（默认 10，0 = 全部）
+
+## 数据
+
+- 全部存在本地：`~/Library/Application Support/WordMate/wordmate.db`（SQLite）
+- 设置页可导出 CSV
+
+## 代码结构
+
+```
+main.js            主进程：托盘、窗口、IPC、划词/右键服务、提醒、导出
+preload.js         安全桥接（window.wm API）
+native/            macOS「服务菜单」原生插件（N-API + ObjC++，右键选中文字取词）
+src/db.js          SQLite 数据层
+src/scheduler.js   间隔重复算法
+src/dictation.js   默写队列 + SRS 联动回写
+src/translator.js  查词调度（缓存→AI→词典）
+src/ai.js          OpenAI 兼容模型请求（含 Diffu）
+src/dict.js        ECDICT 本地词典兜底
+src/browser-bridge.js  本机浏览器请求与目标语言缓存
+browser-extension/ 整页 / 划词双语网页渲染
+renderer/          桌面界面（原生 HTML/CSS/JS，无框架）
+```
+
+## v0.2 更新（2026-10-08）
+
+⌥D 现在传递完整选区，支持中文和句子，并恢复原剪贴板。关闭自动入本后，划词与服务入口均遵守该设置。缓存按模型和上下文隔离，请求最长等待 45 秒。macOS 服务仅适用于支持文本服务的应用。
+
+### Diffu
+
+设置 →「从 package 3 导入 Diffu 配置」→ 选择 `/Users/qiji/Downloads/package 3/config/models.json` → 测试连接。也可选择 Diffu 预设并自行填写 Key。密钥只存本机数据库。
+
+### 浏览器右键翻译
+
+1. 打包后安装到 `~/Applications/WordMate.app` 并运行（本机已完成）。
+2. 打开 Chrome 的 `chrome://extensions`（Edge 为 `edge://extensions`），启用开发者模式，加载已解压的扩展，选择本项目 `browser-extension` 文件夹。
+3. 在本项目目录运行 `python3 scripts/install-browser-host.py`，或在设置中点击「安装浏览器右键连接」。固定扩展 ID 无需手动复制。安装到当前用户 Chrome / Edge / Chromium 的 NativeMessagingHosts 目录；绑定本扩展固定 ID。
+4. 在网页选中文字，右键「用 WordMate 翻译」。受限页面的可选文本由浏览器自身决定。连接失败时扩展打开安装帮助页。
+
+连接程序使用安装时的 Python 路径；更换 Python 后需重新运行安装脚本。扩展不读取网页全量内容，不保存模型密钥。
+
+### 验证
+
+`npm test` 测试模型请求、返回格式及缓存隔离；`WM_USER_DATA=/tmp/wordmate-smoke WM_SMOKE=1 npm start` 使用隔离数据库运行桌面冒烟测试。
+
+## v0.2.1 完整修复（2026-10-08）
+
+- 设置 / 生词本 / 复习 / 默写都有来源明确的返回按钮；返回保留查词结果和学习进度。设置未保存修改有「保存并返回 / 放弃修改 / 继续编辑」。
+- 设置保存 / 测试固定在窗口底部；查词支持多行文本、Shift+回车换行、清空及复制译文。
+- 生词可编辑，删除后可撤销恢复全部学习字段；窗口间即时同步删除、已掌握与评分变化。
+- SQLite 事务 + 卡片版本 + 提交标识防重复评分和失败重试重复写入。自由练习、错词重考不改排程；到期重学照常允许。
+- 辅助功能读取选区优先；剪贴板备用路径按 changeCount 检测并发变化，保留全部原生剪贴板项目；内容过大时保留原剪贴板并提示用右键入口。
+- 待复习角标定时刷新；睡眠唤醒补发当天提醒；设置显示快捷键冲突和集成状态。
+- `npm run test:integration` 在独立临时数据目录执行真实窗口点击和数据库回归，不更改日常学习库。
+
+当前本机运行版本：`~/Applications/WordMate.app`（v0.2.1）。系统服务和浏览器本机连接均已实际收到选区并完成 Diffu 翻译；浏览器还需在扩展页加载 `~/Applications/WordMate.app/Contents/Resources/browser-extension`。
+
+若服务列表尚未刷新，可执行 `/System/Library/CoreServices/pbs -update`，然后重开来源应用。服务类型及超时配置遵循 [Apple NSServices 文档](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CocoaKeys.html)。
+
+## v0.3.0 浏览器内翻译
+
+点击浏览器扩展图标 → **翻译整个页面**，或网页空白处右键启动。页面保留原文，译文直接插入对应段落旁。支持中文 / 英文、停止、恢复原文、重试和翻译新加载内容。
+
+选中单词 / 段落 → 右键 **WordMate：翻译选中文本**，结果在网页浮层显示；单词的音标、释义、例句和入本状态共用桌面配置。不会跳到桌面查词窗口。
+
+升级时运行新版桌面应用，在设置重新安装本机连接，并在 Chrome / Edge 扩展页面重新加载本扩展（路径 `~/Applications/WordMate.app/Contents/Resources/browser-extension`）。此版新增 activeTab / scripting 权限，浏览器可能需要确认权限变更。无安装扩展时在开发者模式加载该文件夹。
+
+网页脚本不读取模型密钥，通过 Native Messaging → 本机 Unix socket 获取结果。仅用户启动时读取当前网页可见已加载文字；代码、隐藏区、表单输入和可编辑区域不翻译。图片文字、内置页面、扩展商店、部分 PDF 和跨域 iframe 受限制。
+
+验证：`npm run test:browser` 检查真实 Chromium DOM 中的段落渲染、原链接保留、恢复、动态文本、停止、选词和错误重试；`npm run test:integration` 验证本机 socket 与目标语言缓存。
+
+文档按 [docs 文档中心](../docs/README.md) 管理。已启用本地 Git main 分支及提交前检查；开发规范、测试入口、架构 ADR 均在 docs 中。
