@@ -40,7 +40,7 @@ async function loadPreferences() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
     if (!tab?.id) return
     const response = await chrome.runtime.sendMessage({ type: 'command', command: 'get-state', tabId: tab.id })
-    if (response?.state) { $('readingMode').value = response.state.readingMode; $('target').value = response.state.target }
+    if (response?.state) { $('readingMode').value = response.state.readingMode; $('target').value = response.state.target; $('auto-status').textContent = response.state.autoTranslating ? '自动补译已开启：滚动、展开和新内容加载会继续翻译。' : '启动页面翻译后自动补译；停止或恢复原文后关闭。' }
   } catch { /* 浏览器禁止注入时保留默认选项，由操作时显示提示 */ }
 }
 loadPreferences()

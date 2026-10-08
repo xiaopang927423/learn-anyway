@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WordMate 网页翻译",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "整页双语翻译、选词和段落翻译，结果直接显示在网页中。",
   "permissions": [
     "contextMenus",

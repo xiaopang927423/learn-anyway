@@ -13,6 +13,7 @@
   let readingMode = 'bilingual', currentTarget = 'zh', modeButtons = [], collapseButton, panelCollapsed = false
   let hovered = null, hoverSeq = 0
   const pendingHover = new Set()
+  let autoWatching = false, autoTimer = null, autoObserver = null
   function element(tag, text, className) {
     const node = document.createElement(tag)
     if (text != null) node.textContent = text
@@ -121,7 +122,7 @@
       toolbar.prepend(button('重试', () => translateSelection(text)))
     }
   }
-  function cancelPage() { hoverSeq++; pageSeq++; pageRunning = false; if (body) status('已停止，已显示的译文保留；可恢复原文。') }
+  function cancelPage() { autoWatching = false; clearTimeout(autoTimer); hoverSeq++; pageSeq++; pageRunning = false; if (body) status('已停止，已显示的译文保留；可恢复原文。') }
   function restorePage() {
     cancelPage(); selectionSeq++; hoverSeq++
     for (const entry of entries.values()) removeEntry(entry)
@@ -129,6 +130,30 @@
     display('网页翻译'); status('已恢复原文。')
   }
   const excluded = 'script,style,noscript,textarea,input,select,option,pre,code,svg,canvas,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[data-wordmate-ui],[data-wordmate-translation],nav,header,footer,aside,button,[role=button],[role=tab],[role=menu],[role=toolbar],[role=navigation],[role=tree],[role=grid],[role=row],time'
+  const postSelector = '[data-testid="tweetText"],[data-testid="postText"],[data-post-body],[data-content="post-body"]'
+  const hardExcluded = 'script,style,noscript,textarea,input,select,option,pre,code,svg,canvas,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[data-wordmate-ui],[data-wordmate-translation],nav,header,footer,aside,button,[role=tab],[role=menu],[role=toolbar],[role=navigation],time'
+  function postBody(parent) {
+    const explicit = parent.closest(postSelector)
+    if (explicit) return explicit
+    const article = parent.closest('article,[role=article]')
+    if (!article || article.classList.contains('markdown-body')) return null
+    const candidate = parent.closest('[dir=auto]')
+    if (!candidate || !article.contains(candidate) || candidate.closest('[data-testid="User-Name"],[data-testid="socialContext"]')) return null
+    const text = candidate.textContent.trim()
+    // 通用信息流回退只接受完整文本，不将短用户名和时间当作帖子。
+    return text.split(/\s+/).length >= 6 && !candidate.querySelector('time,button,[role=toolbar],[data-testid="User-Name"],[data-testid="socialContext"],article,[role=article]') ? candidate : null
+  }
+  function isExcluded(parent) {
+    if (parent.closest(hardExcluded)) return true
+    const post = postBody(parent)
+    if (!post) return !!parent.closest(excluded)
+    // 引用帖的外层可点击容器不是正文按钮；正文内部的按钮仍排除。
+    for (let node = parent; node; node = node.parentElement) {
+      if (node.matches('[role=button],[role=tree],[role=grid],[role=row]')) return true
+      if (node === post) break
+    }
+    return false
+  }
   function updateModeButtons() {
     for (const control of modeButtons) {
       control.disabled = control.dataset.mode === readingMode
@@ -139,6 +164,10 @@
   function removeEntry(entry) {
     // 只恢复仍然是本扩展写入的文本，不覆盖网站随后更新的内容。
     for (const source of entry.sources) if (source.node.isConnected && source.node.textContent === source.translated) source.node.textContent = source.original
+    for (const change of entry.layout || []) if (entry.block.style.getPropertyValue(change.name) === change.applied) {
+      if (change.before) entry.block.style.setProperty(change.name, change.before, change.priority)
+      else entry.block.style.removeProperty(change.name)
+    }
     entry.output.remove()
   }
   function reconcileEntries() {
@@ -163,8 +192,9 @@
   function readingRoots() {
     // 优先文档 / 文章正文；例如仓库页面中的 README，而不是整个文件浏览器。
     const articles = [...document.querySelectorAll('.markdown-body,article,[role=article]')]
-      .filter(root => !root.closest(excluded) && root.getClientRects().length)
-    if (articles.length) return articles.filter(root => !articles.some(other => other !== root && other.contains(root)))
+      .filter(root => !isExcluded(root) && root.getClientRects().length)
+    const posts = [...document.querySelectorAll(postSelector)].filter(root => !isExcluded(root) && root.getClientRects().length)
+    if (articles.length || posts.length) return [...articles.filter(root => !articles.some(other => other !== root && other.contains(root))), ...posts]
     return [document.querySelector('main,[role=main]') || document.body]
   }
   function protectedText(text) {
@@ -175,6 +205,8 @@
       /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(value)
   }
   function eligibleBlock(parent, roots) {
+    const post = postBody(parent)
+    if (post && !isExcluded(parent) && roots.some(root => root.contains(post))) return post
     const block = parent.closest(proseSelector)
     if (!block || block.closest(excluded) || !roots.some(root => root.contains(block))) return null
     // 正文外的文件表格、导航链接列表、徽章和可点击整行不是阅读段落。
@@ -192,8 +224,8 @@
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
     while (walker.nextNode()) {
       const node = walker.currentNode, parent = node.parentElement
-      if (!parent || parent.closest(excluded)) continue
-      if (!node.textContent.trim() && !parent.closest('p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,figcaption,dt,dd')) continue
+      if (!parent || isExcluded(parent)) continue
+      if (!node.textContent.trim() && !parent.closest('p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,figcaption,dt,dd') && !postBody(parent)) continue
       const computed = getComputedStyle(parent)
       if (computed.display === 'none' || computed.visibility === 'hidden' || !parent.getClientRects().length) continue
       const block = eligibleBlock(parent, roots)
@@ -242,20 +274,52 @@
     if (/^H[1-6]$/.test(group.block.tagName)) output.style.setProperty('font-size', '0.88em', 'important')
     // 译文留在同一个原生段落 / 网格单元内，不新增父布局的独立网格项。
     group.block.append(output)
-    const entry = { output, target, original: group.text, sources: translated.sources }
+    const layout = []
+    const computed = getComputedStyle(group.block)
+    if (postBody(group.block) && parseInt(computed.webkitLineClamp, 10) > 0) {
+      for (const [name, applied] of [['-webkit-line-clamp','none'],['max-height','none'],['overflow','visible'],['display','block']]) {
+        layout.push({ name, applied, before: group.block.style.getPropertyValue(name), priority: group.block.style.getPropertyPriority(name) })
+        group.block.style.setProperty(name, applied, 'important')
+      }
+    }
+    const entry = { output, target, original: group.text, sources: translated.sources, block: group.block, layout }
     entries.set(group.block, entry)
     if (readingMode === 'translated') {
       for (const source of entry.sources) source.node.textContent = source.translated
       output.style.setProperty('display', 'none', 'important')
     }
   }
-  async function translatePage(target = 'zh') {
+  function scheduleContent() {
+    clearTimeout(autoTimer)
+    if (!autoWatching) return
+    autoTimer = setTimeout(() => {
+      if (!autoWatching) return
+      if (pageRunning) { scheduleContent(); return }
+      if (sourceNodes(currentTarget).length) translatePage(currentTarget, true)
+    }, 300)
+  }
+  function watchContent(groups) {
+    autoWatching = true
+    if (!autoObserver) autoObserver = new MutationObserver(records => {
+      if (!autoWatching) return
+      const changed = records.some(record => record.type === 'attributes'
+        ? !record.target.closest('[data-wordmate-ui],[data-wordmate-translation]')
+        : record.type === 'characterData'
+        ? !record.target.parentElement?.closest('[data-wordmate-ui],[data-wordmate-translation]')
+        : [...record.addedNodes].some(node => node.nodeType === Node.TEXT_NODE || (node.nodeType === Node.ELEMENT_NODE && !node.matches('[data-wordmate-ui],[data-wordmate-translation]'))))
+      if (changed) scheduleContent()
+    })
+    autoObserver.disconnect()
+    autoObserver.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class','style','hidden','aria-hidden','dir','data-testid'] })
+  }
+  async function translatePage(target = 'zh', automatic = false) {
     currentTarget = target
     if (pageRunning) { selectionSeq++; display('网页翻译'); status('正在翻译当前页面，请等待或先停止。'); return }
     // 切换目标语言时清掉旧译文，以当前原文重新翻译。
     if ([...entries.values()].some(entry => entry.target !== target)) restorePage()
-    selectionSeq++; display(readingMode === 'bilingual' ? '网页双语对照' : (target === 'zh' ? '网页仅中文' : '网页仅译文'))
+    if (!automatic) { selectionSeq++; display(readingMode === 'bilingual' ? '网页双语对照' : (target === 'zh' ? '网页仅中文' : '网页仅译文')) }
     const nodes = sourceNodes(target), seq = ++pageSeq
+    watchContent(nodes)
     if (!nodes.length) { status(entries.size ? '当前页面已经翻译完成。' : '未找到可翻译的可见文字。图片、代码、表单和未加载内容不翻译。'); return }
     pageRunning = true
     let next = 0, finished = 0, failures = 0, firstError = '', abort = false
@@ -272,7 +336,7 @@
           if (seq !== pageSeq) return
           failures++; firstError ||= error.message
           // 连接/配置失效时停止整页队列，避免对每个节点重复请求。
-          if (/connect|host|连接|配置|运行|API Key|HTTP 40[134]|HTTP 429/i.test(error.message)) abort = true
+          if (/connect|host|连接|配置|运行|API Key|HTTP 40[134]|HTTP 429/i.test(error.message)) { abort = true; autoWatching = false }
         }
         renderProgress()
       }
@@ -280,10 +344,12 @@
     await Promise.all([worker(), worker()])
     if (seq !== pageSeq) return
     pageRunning = false
+    if (failures) autoWatching = false
     if (viewMode !== 'page') return
-    status(`翻译完成：${finished} 处成功${failures ? `，${failures} 处失败：${firstError}` : ''}${abort ? '；后续内容未翻译，请修复连接后重试。' : ''}。`, failures > 0)
+    status(`翻译完成：${finished} 处成功${failures ? `，${failures} 处失败：${firstError}` : ''}${abort ? '；后续内容未翻译，请修复连接后重试。' : autoWatching ? '；自动补译新内容已开启' : ''}。`, failures > 0)
     toolbar.prepend(button(failures || abort ? '重试未完成内容' : '翻译新加载内容', () => translatePage(target)))
     if (!failures && !abort) collapse(true)
+    if (autoWatching) scheduleContent()
   }
   // 激活当前页后，划词出现轻量入口，不在每次选区变化时自动调用模型。
   const chipHost = document.createElement('div')
@@ -304,11 +370,12 @@
     chipHost.style.top = Math.max(8, Math.min(selected.rect.bottom + 6, innerHeight - 40)) + 'px'
     document.documentElement.append(chipHost)
   })
-  document.addEventListener('scroll', () => chipHost.remove(), true)
+  document.addEventListener('scroll', () => { chipHost.remove(); if (autoWatching) scheduleContent() }, true)
+  window.addEventListener('resize', () => { if (autoWatching) scheduleContent() })
   document.addEventListener('mousemove', event => { hovered = event.target }, { passive:true })
   document.addEventListener('keydown', async event => {
-    if (event.key !== 'Shift' || event.repeat || !hovered?.closest || hovered.closest(excluded)) return
-    const block = hovered.closest('p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote')
+    if (event.key !== 'Shift' || event.repeat || !hovered?.closest || isExcluded(hovered)) return
+    const block = postBody(hovered) || hovered.closest('p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote')
     if (!block || pendingHover.has(block) || entries.has(block)) return
     const group = sourceNodes('zh').find(item => item.block === block)
     if (!group) return
@@ -323,7 +390,7 @@
   })
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (!message?.command) return false
-    if (message.command === 'get-state') { respond({ ok: true, state: { readingMode, target: currentTarget } }); return false }
+    if (message.command === 'get-state') { respond({ ok: true, state: { readingMode, target: currentTarget, autoTranslating: autoWatching } }); return false }
     if (message.readingMode) setReadingMode(message.readingMode)
     if (message.command === 'mode') { respond({ ok: true }); return false }
     if (message.command === 'activate') { display('WordMate 双语阅读'); status('已启用当前页：选中文字后点击翻译按钮；鼠标停在段落上按 Shift 可只翻译该段。') }
