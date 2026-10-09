@@ -24,23 +24,8 @@ impl WordMateInputController {
             host::with(|h| h.assistant.invalidate(true));
             return false;
         }
-        // A staged sentence must not trap the caret at the final pinyin token.
-        // Finish the owned text before letting the app perform its normal edit.
-        if host::with(|h| h.assistant.has_draft()).unwrap_or(false)
-            && [
-                sel!(moveLeft:),
-                sel!(moveRight:),
-                sel!(moveWordLeft:),
-                sel!(moveWordRight:),
-                sel!(moveToBeginningOfLine:),
-                sel!(moveToLeftEndOfLine:),
-                sel!(moveToEndOfLine:),
-                sel!(moveToRightEndOfLine:),
-            ]
-            .contains(&selector)
-        {
-            self.commit_source(client);
-            return false;
+        if self.edit_draft_command(selector, client) {
+            return true;
         }
         if selector == sel!(deleteBackward:) {
             host::with(|h| {
@@ -67,6 +52,7 @@ impl WordMateInputController {
             // ⌘⌫：删光标前的全部拼音
             host::with(|h| {
                 h.assistant.draft.clear();
+                h.assistant.draft_cursor = None;
                 h.engine.delete_to_start();
             });
             self.refresh(client);
@@ -93,6 +79,7 @@ impl WordMateInputController {
             host::with(|h| {
                 h.engine.clear();
                 h.assistant.draft.clear();
+                h.assistant.draft_cursor = None;
                 h.cancel_prediction();
             });
             self.refresh(client);

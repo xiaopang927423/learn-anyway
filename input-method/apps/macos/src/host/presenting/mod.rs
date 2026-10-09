@@ -11,7 +11,9 @@ use super::*;
 
 impl Host {
     pub fn is_composing(&self) -> bool {
-        !self.engine.composition().is_empty() || self.assistant.has_draft()
+        !self.engine.composition().is_empty()
+            || self.assistant.has_draft()
+            || self.assistant.draft_cursor.is_some()
     }
     /// 删掉当前页第 `offset` 格的候选：用户词整个删、词库词清学习。返回给用户看的一句话；那格没有候选返回 `None`。
     pub fn forget_candidate(&mut self, offset: usize) -> Option<String> {
@@ -169,7 +171,7 @@ impl Host {
             ))
         } else {
             Some(format!(
-                "{} 中文 · {} 英文 · {} 空格{}",
+                "{} 中文 · {} 英文 · {} 草稿空格{}",
                 original.label(),
                 translated.label(),
                 space.label(),

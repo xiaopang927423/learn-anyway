@@ -45,6 +45,36 @@ impl Cells {
 }
 
 impl CandidateView {
+    pub(super) fn matrix_hit(
+        &self,
+        frame: &Frame,
+        point: NSPoint,
+        y: f64,
+    ) -> Option<(usize, bool)> {
+        let theme = self.theme();
+        let cells = self.matrix_cells(frame);
+        let columns = frame.columns.max(1);
+        frame.rows.iter().enumerate().find_map(|(i, row)| {
+            let x = theme.padding + HIGHLIGHT_INSET + cells.offset(i % columns, theme.column_gap);
+            let top = y + cells.row_height * (i / columns) as f64;
+            (point.x >= x - HIGHLIGHT_INSET
+                && point.x < x + cells.column_widths[i % columns] + HIGHLIGHT_INSET
+                && point.y >= top
+                && point.y < top + cells.row_height)
+                .then(|| {
+                    (
+                        i,
+                        row.assistant_translation.is_some()
+                            && point.y
+                                >= top
+                                    + theme.row_padding
+                                    + self.measure("x", &theme.text_font).height
+                                    + 4.,
+                    )
+                })
+        })
+    }
+
     pub(super) fn matrix_size(&self, frame: &Frame) -> (f64, f64) {
         if frame.rows.is_empty() {
             return (0.0, 0.0);

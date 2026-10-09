@@ -7,9 +7,26 @@ impl WordMateInputController {
         if chinese {
             return self.commit_source(client);
         }
+        let source_is_english = host::with(|h| {
+            let source = format!(
+                "{}{}",
+                h.assistant.draft_text(),
+                h.session
+                    .candidate(h.session.highlighted)
+                    .map(|c| c.text)
+                    .unwrap_or_default()
+            );
+            h.assistant.has_draft() && !source.is_empty() && source.is_ascii()
+        })
+        .unwrap_or(false);
+        if source_is_english {
+            return self.commit_source(client);
+        }
         // Already-English candidates need no model round trip or translation.
         let english = host::with(|h| {
-            (!h.engine.composition().is_empty()
+            (!h.assistant.has_draft()
+                && h.assistant.target != "en"
+                && !h.engine.composition().is_empty()
                 && h.session
                     .candidate(h.session.highlighted)
                     .is_some_and(|c| c.kind == qingjian_core::CandidateKind::English))
@@ -32,7 +49,7 @@ impl WordMateInputController {
         })
         .flatten();
         let Some((candidate, text, meaning, generation)) = snapshot else {
-            host::with(|h| h.status = Some("译文正在准备；可继续选字或回车确认中文".into()));
+            host::with(|h| h.status = Some("译文正在准备；可继续选字或用原文快捷键确认".into()));
             return true;
         };
         let active = host::with(|h| {
@@ -65,11 +82,13 @@ impl WordMateInputController {
             if !h.preedit_mode.inline() && draft.is_empty() {
                 return (String::new(), 0);
             }
-            let cursor = draft.chars().count()
-                + query
-                    .as_ref()
-                    .map(|query| query.marked_cursor())
-                    .unwrap_or(0);
+            let cursor = h.assistant.draft_cursor.unwrap_or_else(|| {
+                draft.chars().count()
+                    + query
+                        .as_ref()
+                        .map(|query| query.marked_cursor())
+                        .unwrap_or(0)
+            });
             (
                 format!(
                     "{}{}",
@@ -102,6 +121,7 @@ impl WordMateInputController {
             h.engine.commit_staged(&choices, &output);
             h.engine.set_input(&remaining);
             h.assistant.draft.clear();
+            h.assistant.draft_cursor = None;
             h.assistant.committing = true;
             Some(parts)
         })
@@ -116,7 +136,16 @@ impl WordMateInputController {
             }
             h.assistant.note_text(&output);
             if confirmed {
-                if meaning.chars().count() <= 8 && text.split_whitespace().count() <= 8 {
+                let source: String = parts.iter().map(|part| part.text.as_str()).collect();
+                if let Some((fragment, original)) =
+                    crate::sentence_edit::learning_fragment(&source, &text)
+                {
+                    h.assistant.learn(&fragment, &original, "fragment");
+                } else if parts.len() <= 1
+                    && source.chars().all(|c| !c.is_ascii_alphabetic())
+                    && meaning.chars().count() <= 8
+                    && text.split_whitespace().count() <= 8
+                {
                     h.assistant.learn(&text, &meaning, "fragment");
                 } else {
                     let words = format!(
@@ -162,7 +191,10 @@ impl WordMateInputController {
                     .map(|query| query.marked_text())
                     .unwrap_or_default()
             );
-            let candidate = query.and_then(|query| query.candidates.items.into_iter().next());
+            let candidate = h
+                .session
+                .candidate(h.session.highlighted)
+                .or_else(|| query.and_then(|query| query.candidates.items.into_iter().next()));
             let source = format!(
                 "{}{}",
                 draft,
@@ -289,8 +321,21 @@ impl WordMateInputController {
                         });
                         return self.accept_wordmate(client, false);
                     }
-                    client.replace_range(&result, job.range);
-                    host::with(|h| h.end_translation());
+                    let confirmed = client.replace_range_verified(&result, job.range);
+                    host::with(|h| {
+                        h.end_translation();
+                        if confirmed {
+                            if let Some((fragment, original)) =
+                                crate::sentence_edit::learning_fragment(&job.source, &result)
+                            {
+                                h.assistant.learn(&fragment, &original, "annotation");
+                            }
+                        } else if !confirmed {
+                            h.assistant.status = "无法确认上屏，请检查原文；未加入生词本".into();
+                            h.assistant.fallback = Some(result);
+                            h.render();
+                        }
+                    });
                 }
                 true
             }

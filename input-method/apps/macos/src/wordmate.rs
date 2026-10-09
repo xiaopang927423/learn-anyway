@@ -117,6 +117,11 @@ fn rpc_cancellable(
     let mut stream = match UnixStream::connect(&path) {
         Ok(s) => s,
         Err(_) => {
+            // An explicit backend directory belongs to a test/development instance.
+            // Never launch the user's desktop app to service that isolated socket.
+            if std::env::var_os("WM_USER_DATA").is_some() {
+                return Err("SERVICE_UNAVAILABLE".into());
+            }
             launch_backend();
             let deadline = Instant::now() + Duration::from_secs(2);
             loop {
@@ -173,6 +178,7 @@ pub struct DraftWord {
 pub struct Assistant {
     pub generation: u64,
     pub draft: Vec<DraftWord>,
+    pub draft_cursor: Option<usize>,
     pub committing: bool,
     pub fallback: Option<String>,
     epoch: String,
@@ -256,6 +262,7 @@ impl Assistant {
         Self {
             generation: 0,
             draft: Vec::new(),
+            draft_cursor: None,
             committing: false,
             fallback: None,
             epoch: uuid::Uuid::new_v4().to_string(),
@@ -369,6 +376,24 @@ impl Assistant {
     }
     pub fn draft_text(&self) -> String {
         self.draft.iter().map(|word| word.text.as_str()).collect()
+    }
+    pub fn set_edited_draft(&mut self, text: String, cursor: usize) {
+        self.draft.clear();
+        if !text.is_empty() {
+            self.draft.push(DraftWord {
+                candidate: qingjian_core::Candidate {
+                    text: text.clone(),
+                    kind: qingjian_core::CandidateKind::Generated,
+                    syllables: Vec::new(),
+                    reading: None,
+                    translation: None,
+                    aux_code: None,
+                },
+                keys: String::new(),
+                text,
+            });
+        }
+        self.draft_cursor = Some(cursor);
     }
     pub fn has_draft(&self) -> bool {
         !self.draft.is_empty()

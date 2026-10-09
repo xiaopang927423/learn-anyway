@@ -13,6 +13,7 @@ mod host;
 mod imk;
 mod menubar;
 mod preferences;
+mod sentence_edit;
 mod wordmate;
 
 use objc2::{AnyThread, ClassType, MainThreadMarker};
@@ -85,6 +86,13 @@ fn main() {
     let controller_class = imk::WordMateInputController::class();
     tracing::info!(class = %controller_class.name().to_string_lossy(), "控制器类已注册");
 
+    if args.iter().any(|a| a == "--interaction-smoke") {
+        if std::env::var_os("WM_IME_DATA").is_none() || std::env::var_os("WM_USER_DATA").is_none() {
+            eprintln!("Set WM_IME_DATA and WM_USER_DATA to isolated test directories first");
+            std::process::exit(2);
+        }
+        std::panic::set_hook(Box::new(|info| eprintln!("IME_INTERACTION_FAILED {info}")));
+    }
     let mtm = MainThreadMarker::new().expect("输入法入口必须在主线程");
     if let Err(error) = host::init(mtm, &info) {
         tracing::error!(%error, "Engine 初始化失败");
@@ -164,6 +172,11 @@ fn main() {
         }
     }
 
+    if args.iter().any(|a| a == "--interaction-smoke") {
+        NSApplication::sharedApplication(mtm);
+        imk::interaction_smoke::run();
+        return;
+    }
     // IMKServer 需要在主线程创建，并在整个进程生命周期内活着
     let server = unsafe {
         IMKServer::initWithName_bundleIdentifier(

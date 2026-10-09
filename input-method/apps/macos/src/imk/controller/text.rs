@@ -5,7 +5,25 @@ use super::*;
 impl WordMateInputController {
     pub(super) fn handle_text(&self, text: &str, client: TextClient<'_>) -> bool {
         self.note_application(&client);
+        if host::with(|h| h.assistant.draft_cursor.is_some()).unwrap_or(false) {
+            host::with(|h| {
+                let mut text_owned = h.assistant.draft_text();
+                let mut cursor = h.assistant.draft_cursor.unwrap_or(0);
+                crate::sentence_edit::insert(&mut text_owned, &mut cursor, text);
+                h.assistant.set_edited_draft(text_owned, cursor);
+            });
+            self.refresh(client);
+            return true;
+        }
         let mut composing = host::with(|h| h.is_composing()).unwrap_or(false);
+        if text.len() == 1
+            && text.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+            && !modifiers::caps_lock_on()
+        {
+            host::with(|h| h.engine.push(text.chars().next().unwrap()));
+            self.refresh(client);
+            return true;
+        }
         let english = modifiers::caps_lock_on();
         // 终端、编辑器这类应用（`[apps] english_candidates_off`）里英文模式是纯直通
         let english_candidates = english

@@ -152,12 +152,12 @@ impl GeneralPage {
         note(
             layout,
             mtm,
-            "Space 选中文 / 原文，Option+Space 选英文；Tab 原样输入当前字母并加空格。三项可在快捷键页修改。整句先正常输入和编辑，选中后按 Ctrl+Option+T 翻译；不使用回车采用译文。",
+            "Space 选中文 / 原文，Option+Space 选英文；Tab 将字母和空格保留在黑框草稿。方向键可编辑前文，编辑处仍用 Tab 输入空格；End 回到末尾继续拼音选词。Ctrl+Option+T 翻译整句或应用选区，四项均可自定义。",
         );
         note(
             layout,
             mtm,
-            "Tab 或方向键选词；空格、回车、标点仍原样上屏敲的字母，不选词时与直接打字一样。",
+            "进入句子草稿后，Space 先选入中文，Option+Space 采用整句英文；没有待选拼音时 Space 确认原文。翻译预览期间 Enter 不采用、不发送。",
         );
         let english_off_in_apps = checkbox(
             mtm,

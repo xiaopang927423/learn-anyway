@@ -242,26 +242,66 @@ impl CandidateView {
         let point = self.convertPoint_fromView(event.locationInWindow(), None);
         let hit = {
             let frame = self.ivars().frame.borrow();
-            if self.ivars().layout.get() != LayoutMode::Vertical {
-                return;
+            let theme = self.theme();
+            let start_y = theme.padding + self.top_line_size(&frame).1;
+            match self.ivars().layout.get() {
+                LayoutMode::Vertical => {
+                    let mut y = start_y;
+                    frame.rows.iter().enumerate().find_map(|(index, row)| {
+                        let top = y;
+                        y += self.vertical_row_height(row);
+                        (point.x >= theme.padding
+                            && point.x < self.bounds().size.width - theme.padding
+                            && point.y >= top
+                            && point.y < y)
+                            .then(|| {
+                                (
+                                    index,
+                                    row.assistant_translation.is_some()
+                                        && point.y
+                                            >= top
+                                                + theme.row_padding
+                                                + self.measure(&row.text, &theme.text_font).height
+                                                + 4.,
+                                )
+                            })
+                    })
+                }
+                LayoutMode::Horizontal if frame.columns > 0 => {
+                    self.matrix_hit(&frame, point, start_y)
+                }
+                LayoutMode::Horizontal => {
+                    let (items, height) = self.items(&frame.rows);
+                    let mut x = theme.padding + HIGHLIGHT_INSET;
+                    frame
+                        .rows
+                        .iter()
+                        .zip(items)
+                        .enumerate()
+                        .find_map(|(index, (row, item))| {
+                            let left = x;
+                            let width = item.index_width + INDEX_GAP + item.text_width;
+                            x += width + theme.column_gap;
+                            (point.x >= left - HIGHLIGHT_INSET
+                                && point.x < left + width + HIGHLIGHT_INSET
+                                && point.y >= start_y
+                                && point.y < start_y + height)
+                                .then(|| {
+                                    (
+                                        index,
+                                        row.assistant_translation.is_some()
+                                            && point.y
+                                                >= start_y
+                                                    + theme.row_padding
+                                                    + self
+                                                        .measure(&row.text, &theme.text_font)
+                                                        .height
+                                                    + 4.,
+                                    )
+                                })
+                        })
+                }
             }
-            let mut y = self.theme().padding + self.top_line_size(&frame).1;
-            frame.rows.iter().enumerate().find_map(|(index, row)| {
-                let top = y;
-                let height = self.vertical_row_height(row);
-                y += height;
-                (point.y >= top && point.y < y).then(|| {
-                    (
-                        index,
-                        row.assistant_translation.is_some()
-                            && point.y
-                                >= top
-                                    + self.theme().row_padding
-                                    + self.measure(&row.text, &self.theme().text_font).height
-                                    + 4.,
-                    )
-                })
-            })
         };
         let Some((offset, english)) = hit else {
             return;

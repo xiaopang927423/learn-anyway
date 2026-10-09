@@ -62,3 +62,5 @@ fn panic_message(payload: &(dyn Any + Send)) -> &str {
         .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
         .unwrap_or("<非文字 payload>")
 }
+
+pub(crate) use controller::interaction_smoke;

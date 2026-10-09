@@ -120,6 +120,12 @@ impl<'a> TextClient<'a> {
         }
     }
 
+    pub fn replace_range_verified(&self, text: &str, range: NSRange) -> bool {
+        self.replace_range(text, range);
+        self.read_range(NSRange::new(range.location, text.encode_utf16().count()))
+            .is_some_and(|actual| actual == text)
+    }
+
     /// 读光标附近的文本给联想当上下文：marked text 之前 `before` 个字符、之后 `after` 个字符。
     /// 应用不支持 `attributedSubstringFromRange:`（不少 Electron / 终端）时返回 `None`，由 Core 退回本地历史。
     pub fn surrounding_text(&self, before: usize, after: usize) -> Option<SurroundingText> {

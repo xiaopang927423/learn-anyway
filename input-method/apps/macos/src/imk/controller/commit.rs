@@ -11,6 +11,10 @@ impl WordMateInputController {
     pub(crate) fn choose_candidate(&self, index: usize, client: TextClient<'_>, translation: bool) {
         let review = host::with(|h| h.translation.clone()).flatten();
         if translation {
+            if review.is_none() && host::with(|h| h.session.highlighted != index).unwrap_or(true) {
+                // A translation is owned by its highlighted source/generation.
+                return;
+            }
             if review.is_some() {
                 self.handle_translation_review(49, client);
             } else {
@@ -106,11 +110,13 @@ impl WordMateInputController {
         let (owned, cursor) = host::with(|h| {
             let draft = h.assistant.draft_text();
             let query = h.engine.query().ok();
-            let cursor = draft.chars().count()
-                + query
-                    .as_ref()
-                    .map(|query| query.marked_cursor())
-                    .unwrap_or(0);
+            let cursor = h.assistant.draft_cursor.unwrap_or_else(|| {
+                draft.chars().count()
+                    + query
+                        .as_ref()
+                        .map(|query| query.marked_cursor())
+                        .unwrap_or(0)
+            });
             (
                 format!(
                     "{}{}",
@@ -189,6 +195,7 @@ impl WordMateInputController {
             }
             h.engine.commit_staged(&parts, &output);
             h.assistant.draft.clear();
+            h.assistant.draft_cursor = None;
             Some(output)
         })
         .flatten();
@@ -220,6 +227,7 @@ impl WordMateInputController {
             host::with(|h| {
                 h.engine.clear();
                 h.assistant.draft.clear();
+                h.assistant.draft_cursor = None;
                 h.assistant.invalidate(true);
             });
             return false;

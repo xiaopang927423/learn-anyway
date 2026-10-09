@@ -99,6 +99,10 @@ impl WordMateInputController {
                     });
                 }
             }
+            if let Some(position) = h.assistant.draft_cursor {
+                cursor = position.min(marked.chars().count());
+                preedit = Preedit::plain(&marked, cursor);
+            }
             h.reset_session(preedit, candidates);
             h.schedule_rescoring();
             (

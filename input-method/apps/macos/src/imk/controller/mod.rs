@@ -20,6 +20,8 @@ use crate::menubar;
 mod command;
 mod commit;
 mod display;
+mod draft;
+pub(crate) mod interaction_smoke;
 mod text;
 mod translate;
 
@@ -206,6 +208,7 @@ impl WordMateInputController {
         if secure_input::enabled() {
             host::with(|h| {
                 h.assistant.draft.clear();
+                h.assistant.draft_cursor = None;
                 h.assistant.invalidate(true);
                 h.cancel_prediction();
                 h.end_translation();
@@ -266,13 +269,10 @@ impl WordMateInputController {
             return false;
         }
         if matches(space) {
-            host::with(|h| h.end_translation());
-            if host::with(|h| h.is_composing()).unwrap_or(false) {
-                self.commit_raw(client);
+            if host::with(|h| h.translation.is_some()).unwrap_or(false) {
+                host::with(|h| h.end_translation());
             }
-            client.insert_text(" ");
-            host::with(|h| h.assistant.note_text(" "));
-            return true;
+            return self.insert_draft_space(client);
         }
         if matches(original) {
             if let Some(job) = host::with(|h| h.translation.clone()).flatten() {
@@ -284,7 +284,9 @@ impl WordMateInputController {
             }
             if host::with(|h| h.is_composing()).unwrap_or(false) {
                 if host::with(|h| h.assistant.has_draft()).unwrap_or(false) {
-                    return self.commit_source(client);
+                    if host::with(|h| h.engine.composition().is_empty()).unwrap_or(false) {
+                        return self.commit_source(client);
+                    }
                 }
                 // Space means Chinese/original even if automatic English ranking
                 // put an English spelling above the Chinese interpretation.
