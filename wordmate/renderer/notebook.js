@@ -45,7 +45,7 @@ function render() {
         <span class="chev">▶</span>
         <div class="info">
           <div class="w">${esc(w.word)} ${mastered ? '<span class="tag">已掌握</span>' : ''}</div>
-          <div class="m">${esc(firstMeaning(w))}${(w.lookup_count || 0) > 1 ? `　·　查过 ${w.lookup_count} 次` : ''}${w.context ? '　·　' + esc(w.context) : ''}</div>
+          <div class="m">${esc(firstMeaning(w))}${(w.lookup_count || 0) > 1 ? `　·　查过 ${w.lookup_count} 次` : ''}${w.ime_use_count ? `　·　输入法采用 ${w.ime_use_count} 次` : ''}${w.context ? '　·　' + esc(w.context) : ''}</div>
         </div>
         <div class="ops">
           ${mastered
@@ -129,7 +129,7 @@ function detailHtml(w) {
     <div class="detail-head">
       ${w.phonetic ? `<span class="phonetic">${esc(w.phonetic)}</span>` : ''}
       <button class="speak" data-speak="${esc(w.word)}" title="朗读">🔊</button>
-      <span class="muted src-tag">${w.source === 'local_dict' ? '本地词典' : 'AI'}</span>
+      <span class="muted src-tag">${w.source === 'input-method' ? '输入法' : w.source === 'local_dict' ? '本地词典' : 'AI'}</span>
     </div>
     ${defs.length ? `<ul class="defs">${defs.map((d) => `<li><b>${esc(d.pos)}</b>${esc(d.meaning)}</li>`).join('')}</ul>` : '<p class="muted">（无释义）</p>'}
     ${formsHtml(w.forms)}

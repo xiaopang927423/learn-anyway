@@ -1,0 +1,5 @@
+/* Name shown in the input source list and the input method menu */
+CFBundleName = "WordMateInput";
+CFBundleDisplayName = "WordMateInput";
+/* Input mode display name, keyed by the mode ID in Info.plist */
+"com.qiji.wordmate.inputmethod.Hans" = "WordMateInput";

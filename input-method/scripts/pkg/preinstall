@@ -1,0 +1,32 @@
+#!/bin/bash
+set -euo pipefail
+wm_user_home="$3"
+if [[ "$wm_user_home" == "/" || ! -d "$wm_user_home" ]]; then
+  wm_user_home=$(/usr/bin/python3 -c 'import os,pwd; print(pwd.getpwuid(os.stat("/dev/console").st_uid).pw_dir)')
+fi
+wm_bundle="$wm_user_home/Library/Input Methods/WordMateInput.app"
+if [[ -d "$wm_bundle" ]]; then
+  wm_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$wm_bundle/Contents/Info.plist")
+  [[ "$wm_id" == "com.qiji.wordmate.inputmethod" ]] || { echo 'Unexpected existing application; refusing replacement'; exit 1; }
+  /usr/bin/python3 - "$wm_bundle" <<'PY'
+import os,signal,subprocess,sys,time
+exe=sys.argv[1]+'/Contents/MacOS/WordMateInput'
+pids=[]
+for line in subprocess.check_output(['ps','-axo','pid=,command='],text=True).splitlines():
+    parts=line.strip().split(None,1)
+    if len(parts)==2 and (parts[1]==exe or parts[1].startswith(exe+' ')):
+        pid=int(parts[0]);os.kill(pid,signal.SIGTERM);pids.append(pid)
+for _ in range(50):
+    remaining=[]
+    for pid in pids:
+        try:os.kill(pid,0);remaining.append(pid)
+        except ProcessLookupError:pass
+    if not remaining:break
+    pids=remaining;time.sleep(.1)
+else:raise SystemExit('Input method is still running; replacement canceled')
+PY
+  wm_backup="$wm_user_home/Library/Application Support/WordMateInput/install-backups"
+  /bin/mkdir -p "$wm_backup"
+  /usr/bin/ditto -c -k --keepParent "$wm_bundle" "$wm_backup/WordMateInput-$(date +%Y%m%d-%H%M%S).zip"
+fi
+exit 0

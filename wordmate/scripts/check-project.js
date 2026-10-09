@@ -1,6 +1,6 @@
 const fs = require('fs'), path = require('path'), { execFileSync } = require('child_process')
 const appRoot = path.resolve(__dirname, '..'), root = path.resolve(appRoot, '..')
-const skipped = new Set(['node_modules','dist','.git','.claude','build','bin','test-artifacts','__pycache__'])
+const skipped = new Set(['node_modules','dist','.git','.claude','build','bin','test-artifacts','__pycache__','target','bundle','resources'])
 function files(dir) { return fs.readdirSync(dir,{withFileTypes:true}).flatMap(item => skipped.has(item.name) ? [] : item.isDirectory() ? files(path.join(dir,item.name)) : [path.join(dir,item.name)]) }
 for (const name of ['架构目录','测试目录','产品需求目录']) {
   if (!fs.existsSync(path.join(root,'docs',name,'README.md'))) throw new Error('缺少文档分类入口：' + name)
@@ -9,7 +9,7 @@ const all = files(root)
 for (const file of all) {
   if (file.endsWith('.js')) execFileSync(process.execPath,['--check',file],{stdio:'pipe'})
   if (file.endsWith('.py')) execFileSync('/usr/bin/python3',['-c','import pathlib,sys; p=pathlib.Path(sys.argv[1]); compile(p.read_text(encoding="utf-8"), str(p), "exec")',file],{stdio:'pipe'})
-  if (!file.endsWith('.md')) continue
+  if (!file.endsWith('.md') || file.startsWith(path.join(root,'input-method','crates') + path.sep)) continue
   const text = fs.readFileSync(file,'utf8')
   for (const match of text.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
     const link = match[1].split('#')[0].replace(/^<|>$/g,'')

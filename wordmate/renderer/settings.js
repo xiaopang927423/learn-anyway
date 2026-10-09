@@ -12,6 +12,7 @@ function formValues() {
   const count = Number($('dictationCount').value)
   if (!Number.isInteger(count) || count < 0 || count > 200) throw new Error('每轮默写词数须为 0–200 的整数')
   return { baseUrl: $('baseUrl').value.trim().replace(/\/+$/, ''), apiKey: $('apiKey').value.trim(),
+    imeEnabled: $('imeEnabled').checked, imeAutoAdd: $('imeAutoAdd').checked, imeSaveContext: $('imeSaveContext').checked,
     thinkingEnabled: $('thinkingEnabled').checked, thinkingParameter: $('thinkingParameter').value,
     model: $('model').value.trim() || 'qwen-turbo', remindTime: $('remindTime').value || '20:00',
     notifyEnabled: $('notifyEnabled').checked, autoAdd: $('autoAdd').checked,
@@ -22,6 +23,9 @@ async function load() {
     const s = await wm.getSettings()
     for (const field of ['baseUrl','apiKey','model','remindTime']) $(field).value = s[field] || ''
     for (const field of ['notifyEnabled','autoAdd','dictationAffectsSchedule']) $(field).checked = s[field] !== false
+    $('imeEnabled').checked = s.imeEnabled === true
+    $('imeAutoAdd').checked = s.imeAutoAdd !== false
+    $('imeSaveContext').checked = s.imeSaveContext === true
     $('thinkingEnabled').checked = s.thinkingEnabled === true
     $('thinkingParameter').value = s.thinkingParameter || 'auto'
     $('dictationCount').value = s.dictationCount ?? 10

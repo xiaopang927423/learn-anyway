@@ -32,6 +32,7 @@ if (!gotLock) {
 } else {
   // 再次启动时（比如又跑了一次 npm start），聚焦已有查词窗而不是静默忽略
   app.on('second-instance', (event, argv) => {
+    if (argv.includes('--ime-background')) { repairImeBridge(); return }
     if (argv.includes('--repair-browser-bridge')) { repairBrowserBridge(); return }
     const url = argv.find(x => x.startsWith('wordmate://'))
     if (url) handleTranslateUrl(url)
@@ -43,7 +44,9 @@ let pendingTranslateUrl = null
 function handleTranslateUrl(value) {
   try {
     const url = new URL(value)
-    if (url.protocol !== 'wordmate:' || url.hostname !== 'translate') return
+    if (url.protocol !== 'wordmate:') return
+    if (url.hostname === 'settings') { if (db.ready()) open('settings'); return }
+    if (url.hostname !== 'translate') return
     const text = url.searchParams.get('text') || ''
     if (text.length > 12000) return
     if (!db.ready()) pendingTranslateUrl = value
@@ -73,6 +76,13 @@ function goBack(name) {
   return true
 }
 const resourceRoot = app.isPackaged ? process.resourcesPath : __dirname
+let imeBridge = null
+let imeRepair = null
+function repairImeBridge() {
+  if (imeBridge?.listening) return Promise.resolve()
+  if (!imeRepair) imeRepair = require('./src/ime-bridge').startImeBridge(app.getPath('userData'), db, changed).then(server => { imeBridge = server }).catch(() => { console.error('[WordMate] 输入法连接暂不可用') }).finally(() => { imeRepair = null })
+  return imeRepair
+}
 let browserBridge = null
 let bridgeRepair = null
 function repairBrowserBridge() {
@@ -417,7 +427,8 @@ app.whenReady().then(() => {
   const hostManifest = path.join(app.getPath('appData'), 'Google/Chrome/NativeMessagingHosts/com.qiji.wordmate.json')
   integration.browser = fs.existsSync(hostManifest)
   browserBridge = require('./src/browser-bridge').startBrowserBridge(app.getPath('userData'), changed)
-  app.on('will-quit', () => browserBridge?.dispose())
+  repairImeBridge()
+  app.on('will-quit', () => { browserBridge?.dispose(); imeBridge?.dispose() })
   registerIpc()
   createTray()
   if (!process.env.WM_TEST_SUITE) startMacServices()
@@ -443,7 +454,7 @@ app.whenReady().then(() => {
   if (!process.env.WM_TEST_SUITE) maintenance()
   powerMonitor.on('resume', () => maintenance())
   // 浏览器按需启动桌面后端时保持浏览器焦点。
-  if (!process.argv.includes('--browser-background')) open('lookup')
+  if (!process.argv.some(arg => ['--browser-background','--ime-background'].includes(arg))) open('lookup')
 
   // 全局快捷键 ⌥Space（Option+空格）：任何应用里都能呼出/收起查词窗
   const shortcutOk = !process.env.WM_TEST_SUITE && globalShortcut.register('Alt+Space', toggleLookup)
@@ -458,7 +469,7 @@ app.whenReady().then(() => {
   if (!process.env.WM_TEST_SUITE && failedShortcuts.length) new Notification({ title: 'WordMate 快捷键被占用', body: failedShortcuts.join('、') + '无法注册，请查看设置；可使用菜单栏或右键翻译。' }).show()
 
   // 启动提示：告诉用户应用在哪、怎么用
-  if (!process.env.WM_TEST_SUITE && !process.argv.includes('--browser-background')) new Notification({
+  if (!process.env.WM_TEST_SUITE && !process.argv.some(arg => ['--browser-background','--ime-background'].includes(arg))) new Notification({
     title: 'WordMate 已启动',
     body: '菜单栏 W 图标或 ⌥Space 呼出查词；选中单词按 ⌥D 划词查词',
   }).show()

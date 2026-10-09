@@ -71,7 +71,7 @@ async function translatePageBlock(text, target = 'zh', segments) {
     .update(JSON.stringify([text, target, segments || null, settings.baseUrl, settings.model, settings.thinkingEnabled === true, settings.thinkingParameter || 'auto'])).digest('hex')
   const cached = db.getCache(key)
   if (cached) { try { return { ...JSON.parse(cached), cached: true } } catch {} }
-  const result = await ai.translatePassage(text, target, settings, segments)
+  const result = await require('./model-request-queue').modelQueue.run('page', () => ai.translatePassage(text, target, settings, segments))
   db.saveCache(key, result)
   return result
 }

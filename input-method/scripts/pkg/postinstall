@@ -1,0 +1,21 @@
+#!/bin/bash
+set -euo pipefail
+wm_user_home="$3"
+if [[ "$wm_user_home" == "/" || ! -d "$wm_user_home" ]]; then
+  wm_user_home=$(/usr/bin/python3 -c 'import os,pwd; print(pwd.getpwuid(os.stat("/dev/console").st_uid).pw_dir)')
+fi
+wm_bundle="$wm_user_home/Library/Input Methods/WordMateInput.app"
+wm_exe="$wm_bundle/Contents/MacOS/WordMateInput"
+/usr/bin/codesign --verify --strict "$wm_bundle"
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$wm_bundle"
+# Register in the installing user's context; never select a different keyboard automatically.
+wm_registration=0
+"$wm_exe" --register || wm_registration=$?
+wm_state="$wm_user_home/Library/Application Support/WordMateInput"
+/bin/mkdir -p "$wm_state"
+"$wm_exe" --registration-status > "$wm_state/install-state.json"
+/bin/chmod 600 "$wm_state/install-state.json"
+if [[ "$wm_registration" != 0 ]]; then
+  echo 'WordMate input method files installed; activation pending. See install-state.json.'
+fi
+exit 0

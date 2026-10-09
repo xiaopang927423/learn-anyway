@@ -1,0 +1,120 @@
+{
+  "upstream": "c08ae57",
+  "files": [
+    {
+      "file": "dict.qj",
+      "sha256": "3e33b16a84df555e6f16d52ac8ab3c2c6b6f1f71734e69463861fd5abd9c19dc",
+      "bytes": 3538648
+    },
+    {
+      "file": "dicts/animals.qj",
+      "sha256": "c610234a79fab044332fe8906f3366f91cec640a33991e9fb0be99c9791e2940",
+      "bytes": 1079352
+    },
+    {
+      "file": "dicts/automotive.qj",
+      "sha256": "8297eefff0401ef98518988c77009829b870eaf28aad76608287e11670d10c0b",
+      "bytes": 99984
+    },
+    {
+      "file": "dicts/finance.qj",
+      "sha256": "77046444a82f66bab7d552104b37e8c472f2b737d666eeb7f5af196a206f92c3",
+      "bytes": 125272
+    },
+    {
+      "file": "dicts/food.qj",
+      "sha256": "69cce31b42a51006f9d257e509c2acc9a6b976c305a0d0145160b60f7be0f4e9",
+      "bytes": 461272
+    },
+    {
+      "file": "dicts/historical_figures.qj",
+      "sha256": "d17f184c87d369e5fe4f1cd7ab258bd319e57ee48d196ba433c3f5bfc2236769",
+      "bytes": 511016
+    },
+    {
+      "file": "dicts/idioms.qj",
+      "sha256": "356b78ca8883b945835c649b8d16e304a64c8019efa58f84fb973e65f3a1ee64",
+      "bytes": 213192
+    },
+    {
+      "file": "dicts/it_computing.qj",
+      "sha256": "99f3aa79e4f36e1d4bbf8dd2d02d866f2afd03148b25701c4681f326c2e402a4",
+      "bytes": 671456
+    },
+    {
+      "file": "dicts/law.qj",
+      "sha256": "e3cb519e4967932d2a2fdedf85f2461ac2103d5299f9c5cdee0ffdf1a589cf54",
+      "bytes": 505520
+    },
+    {
+      "file": "dicts/medicine.qj",
+      "sha256": "8be086aeaac8c5d9e7f924f42422a37ba2b174b0ac87b88db584d170e29b7ed6",
+      "bytes": 961104
+    },
+    {
+      "file": "dicts/places.qj",
+      "sha256": "8f27c887641fd8c8a3b04afa1c7345a3fa27f9d55b3f49589aeacdebf6e52d1f",
+      "bytes": 2082624
+    },
+    {
+      "file": "dicts/poetry_lines.qj",
+      "sha256": "e690fcfafd44276863bcabc4e2a259981079c4f10b76559464e61f12fa36ec28",
+      "bytes": 940744
+    },
+    {
+      "file": "emoji-en.tsv",
+      "sha256": "10a9667c13036e0f7f6246a1d8987fa3f4554b2de68d0ee935a2d035717da1c0",
+      "bytes": 98827
+    },
+    {
+      "file": "emoji-zh.tsv",
+      "sha256": "8ea7447dbb700fa73498be36e36e30e16236446e0dd29b326f812de80e7629f0",
+      "bytes": 114160
+    },
+    {
+      "file": "english.tsv",
+      "sha256": "e9dce15a87843c69b26fe7a3979a6848d06db50f14617ef217dd3db4cbf1a742",
+      "bytes": 2204768
+    },
+    {
+      "file": "glossary-en.qj",
+      "sha256": "4cc9c587b206d0f12aabb1b85cb21e6ac2a1c8c4932b9af14332bd96e0be012a",
+      "bytes": 15565368
+    },
+    {
+      "file": "glossary-zh.qj",
+      "sha256": "c1280592349e6bff942ede0aee19935f7883a18935ac3b521a78d654516e755e",
+      "bytes": 2876888
+    },
+    {
+      "file": "levels-en.tsv",
+      "sha256": "ada5c6aa30b0284daf52261674642dc89a74191aa4d8588c2e280ab5f1337ab4",
+      "bytes": 102356
+    },
+    {
+      "file": "lm.qj",
+      "sha256": "f9fb7b4433dddce86610a5d33e571bea963f6c2a5d960b8bc908f25024d34cd1",
+      "bytes": 44405568
+    },
+    {
+      "file": "wubi/LICENSE",
+      "sha256": "43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1",
+      "bytes": 11356
+    },
+    {
+      "file": "wubi/README.md",
+      "sha256": "d142ed1768323d0022f30fe8acc8dd0da4e1704ec00ee20411f7fa14c8a148ef",
+      "bytes": 1962
+    },
+    {
+      "file": "wubi/wubi86.tsv",
+      "sha256": "2ca54a4632b6891ede936b73c7c4c0c9198093c1171c8db37b5a233065df4c86",
+      "bytes": 1336615
+    },
+    {
+      "file": "codes/stroke.qj",
+      "sha256": "77e9f27a6eb2dfe298bf470354010301c262fac84a0fead30f658570d2c8bf2f",
+      "bytes": 3028152
+    }
+  ]
+}

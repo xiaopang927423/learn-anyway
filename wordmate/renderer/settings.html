@@ -32,6 +32,11 @@
     <label class="switch-row"><input id="thinkingEnabled" type="checkbox"> 开启 Thinking（深度思考，默认关闭）</label>
     <label for="thinkingParameter">Thinking 接口适配</label>
     <select id="thinkingParameter"><option value="auto">自动识别 Diffu / Qwen</option><option value="chat_template_kwargs">chat_template_kwargs（vLLM / Qwen）</option><option value="enable_thinking">enable_thinking（DashScope）</option><option value="none">接口自行控制（不发送开关）</option></select>
+    <h2>输入法英文辅助</h2>
+    <label class="switch-row"><input id="imeEnabled" type="checkbox"> 开启输入法云辅助</label>
+    <p class="muted">开启后将当前中文词 / 短语和本输入法近期语境发送给上面的模型。普通输入不依赖云，密码框不发送。仅英语学习。</p>
+    <label class="switch-row"><input id="imeAutoAdd" type="checkbox"> 采用英文并确认上屏后自动入本（同时受总开关控制）</label>
+    <label class="switch-row"><input id="imeSaveContext" type="checkbox"> 保存采用后的学习语境（默认关闭）</label>
     <label for="remindTime">每日提醒时间</label>
     <input id="remindTime" type="time">
 

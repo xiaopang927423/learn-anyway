@@ -16,3 +16,6 @@ __pycache__/
 .env.*
 !.env.example
 models.json
+input-method/target/
+input-method/resources/
+input-method/bundle/

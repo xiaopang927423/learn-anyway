@@ -53,7 +53,7 @@ async function lookup(rawInput, context) {
   // 2) 云端 AI
   if (settings.apiKey) {
     try {
-      result = await ai.translate(input, context, settings)
+      result = await require('./model-request-queue').modelQueue.run('lookup', () => ai.translate(input, context, settings))
       source = 'ai'
     } catch (err) {
       failure = /timeout|aborted/i.test(err.message) ? '请求超时（45 秒）' : err.message

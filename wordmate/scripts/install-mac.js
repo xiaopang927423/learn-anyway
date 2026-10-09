@@ -2,6 +2,18 @@
 const fs = require('fs'), path = require('path'), os = require('os'), {execFileSync} = require('child_process')
 const bundle = path.resolve(__dirname,'../dist/mac-arm64/WordMate.app')
 if (!fs.existsSync(bundle)) throw new Error('请先运行 npm run dist')
+// Reject stale packages before stopping the daily app: version alone does not
+// establish that the paired native input method can connect to this backend.
+const asar = require('@electron/asar')
+function verifyImePackage(appBundle) {
+  const archive = path.join(appBundle, 'Contents/Resources/app.asar')
+  if (!asar.extractFile(archive, 'main.js').toString().includes('startImeBridge') ||
+      !asar.extractFile(archive, 'renderer/settings.html').toString().includes('id="imeEnabled"')) {
+    throw new Error('安装包缺少输入法云辅助服务或设置，请重新运行 npm run dist')
+  }
+  asar.extractFile(archive, 'src/ime-bridge.js')
+}
+verifyImePackage(bundle)
 const userBundle = path.join(os.homedir(),'Applications/WordMate.app')
 const destination = fs.existsSync('/Applications/WordMate.app') ? '/Applications/WordMate.app' : userBundle
 const backup = path.join(os.homedir(),'Library/Application Support/WordMate/app-backup/WordMate.app')
@@ -18,6 +30,7 @@ if (fs.existsSync(destination)) {
 }
 fs.mkdirSync(path.dirname(destination),{recursive:true})
 execFileSync('/usr/bin/ditto',[bundle,destination])
+verifyImePackage(destination)
 // 本项目曾安装的用户目录副本同步升级，避免手动打开该副本又回到旧后端。
 if (destination !== userBundle && fs.existsSync(userBundle)) execFileSync('/usr/bin/ditto',[bundle,userBundle])
 execFileSync('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister',['-f',destination])

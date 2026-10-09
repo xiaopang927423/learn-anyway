@@ -19,6 +19,9 @@ const DEFAULT_SETTINGS = {
   lastNotifiedDate: '',
   remindTime: '20:00',   // 每日复习提醒时间
   notifyEnabled: true,   // 是否开启系统通知提醒
+  imeEnabled: false,
+  imeAutoAdd: true,
+  imeSaveContext: false,
   autoAdd: true,         // 查到的英文单词自动加入生词本
   dictationCount: 10,            // 每轮默写词数（0 = 全部）
   dictationAffectsSchedule: true, // 默写结果计入复习排程（同一词同日只计一次分）
@@ -75,6 +78,12 @@ function init() {
     CREATE TABLE IF NOT EXISTS learning_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT, word_id INTEGER NOT NULL,
       source TEXT NOT NULL, grade INTEGER NOT NULL, created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ime_usage_events (
+      commit_id TEXT PRIMARY KEY, word_id INTEGER NOT NULL,
+      surface_form TEXT NOT NULL, source_meaning TEXT NOT NULL,
+      context TEXT NOT NULL DEFAULT '', origin TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS dictation_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -187,7 +196,7 @@ function getWordById(id) {
 function listWords() {
   // 学习中的排前面，再按加入时间倒序
   return db.prepare(`
-    SELECT * FROM words
+    SELECT words.*, (SELECT count(*) FROM ime_usage_events WHERE word_id = words.id) AS ime_use_count FROM words
     ORDER BY CASE status WHEN 'learning' THEN 0 ELSE 1 END, created_at DESC
   `).all()
 }
@@ -306,7 +315,7 @@ function saveSettings(patch) {
   if (!patch || typeof patch !== 'object') throw new Error('无效设置')
   if ('remindTime' in patch && !/^([01]\d|2[0-3]):[0-5]\d$/.test(patch.remindTime)) throw new Error('无效提醒时间')
   if ('dictationCount' in patch && (!Number.isInteger(patch.dictationCount) || patch.dictationCount < 0 || patch.dictationCount > 200)) throw new Error('每轮默写词数必须为 0–200')
-  for (const k of ['autoAdd', 'notifyEnabled', 'dictationAffectsSchedule', 'thinkingEnabled']) if (k in patch && typeof patch[k] !== 'boolean') throw new Error('无效开关')
+  for (const k of ['autoAdd', 'notifyEnabled', 'dictationAffectsSchedule', 'thinkingEnabled', 'imeEnabled', 'imeAutoAdd', 'imeSaveContext']) if (k in patch && typeof patch[k] !== 'boolean') throw new Error('无效开关')
   for (const k of ['baseUrl','apiKey','model']) if (k in patch && typeof patch[k] !== 'string') throw new Error('无效模型设置')
   if (patch.baseUrl) {
     const url = new URL(patch.baseUrl)
@@ -323,8 +332,28 @@ function saveSettings(patch) {
   return getSettings()
 }
 
+function commitImeLearning(event) {
+  return atomic(() => {
+    const key = 'ime-learning:' + event.commitId
+    const previous = receipt(key)
+    if (previous) {
+      if (previous.digest !== event.digest) throw Object.assign(new Error('确认事件编号冲突'), { code: 'INVALID_INPUT' })
+      return { ...previous, replayed: true }
+    }
+    const settings = getSettings()
+    if (!event.manual && (!settings.autoAdd || !settings.imeAutoAdd)) return saveReceipt(key, { saved: false, skipped: true, digest: event.digest })
+    const context = settings.imeSaveContext ? event.context : ''
+    const saved = addWord({ word: event.expression, definitions: [{ pos: '', meaning: event.sourceMeaning }], source: 'input-method' }, context, 0)
+    db.prepare('INSERT INTO ime_usage_events VALUES (?, ?, ?, ?, ?, ?, ?)').run(event.commitId, saved.id, event.expression, event.sourceMeaning, context, event.origin, localIso())
+    return saveReceipt(key, { saved: true, id: saved.id, exists: saved.exists, digest: event.digest })
+  })
+}
+function imeUsage(wordId) {
+  return db.prepare('SELECT count(*) AS count FROM ime_usage_events WHERE word_id = ?').get(wordId).count
+}
+
 module.exports = {
-  init, ready, localIso, atomic, receipt, saveReceipt, addLearningEvent, restoreWord,
+  init, ready, localIso, commitImeLearning, imeUsage, atomic, receipt, saveReceipt, addLearningEvent, restoreWord,
   hasWord, hasWords, incrementLookup, addWord, removeWord, getWordById, listWords, updateWord, setStatus,
   dueWords, newWords, newReviewedToday, availableNewCount, updateSchedule,
   addDictationLog, dictatedToday, reviewedToday,
