@@ -299,20 +299,52 @@ impl Host {
                     Err(error) => tracing::warn!(%error, "修饰键组合不合法，未改"),
                 }
             }
-            (Setting::TranslateSelectionKeys, SettingValue::Text(text)) => {
-                match text.parse::<KeyCombo>() {
-                    Ok(combo) => {
-                        self.settings.set_value(
-                            "shortcut",
-                            "translate_selection",
-                            combo.key_string(),
-                        );
+            (
+                setting @ (Setting::TranslateSelectionKeys
+                | Setting::ConfirmOriginalKeys
+                | Setting::ConfirmTranslationKeys
+                | Setting::InsertSpaceKeys),
+                SettingValue::Text(text),
+            ) => {
+                if let Ok(combo) = text.parse::<KeyCombo>() {
+                    let mut c = self.settings.config().shortcut;
+                    let name = match setting {
+                        Setting::ConfirmOriginalKeys => {
+                            c.confirm_original = combo;
+                            "confirm_original"
+                        }
+                        Setting::ConfirmTranslationKeys => {
+                            c.confirm_translation = combo;
+                            "confirm_translation"
+                        }
+                        Setting::InsertSpaceKeys => {
+                            c.insert_space = combo;
+                            "insert_space"
+                        }
+                        _ => {
+                            c.translate_selection = combo;
+                            "translate_selection"
+                        }
+                    };
+                    if c.valid_input_keys() {
+                        self.settings
+                            .set_value("shortcut", name, combo.key_string());
+                    } else {
+                        self.preferences
+                            .set_status("快捷键重复或被桌面查词占用，请选择其他组合");
+                        return;
                     }
-                    Err(error) => tracing::warn!(%error, "快捷键不合法，未改"),
                 }
             }
             (Setting::ResetShortcuts, _) => {
                 let defaults = ShortcutConfig::default();
+                for (key, combo) in [
+                    ("confirm_original", defaults.confirm_original),
+                    ("confirm_translation", defaults.confirm_translation),
+                    ("insert_space", defaults.insert_space),
+                ] {
+                    self.settings.set_value("shortcut", key, combo.key_string());
+                }
                 self.settings
                     .set_value("general", "page_keys", PAGE_KEY_OPTIONS[0]);
                 self.settings.set_value(

@@ -116,7 +116,7 @@ fn main() {
                     },
                 ],
                 highlighted: 0,
-                footer: Some("组句中 · ↩中文 · ⌥↩译文".into()),
+                footer: Some("Space 中文 · ⌥Space 英文 · Tab 空格".into()),
                 ..Default::default()
             };
             h.window

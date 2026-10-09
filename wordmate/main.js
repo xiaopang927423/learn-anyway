@@ -456,22 +456,22 @@ app.whenReady().then(() => {
   // 浏览器按需启动桌面后端时保持浏览器焦点。
   if (!process.argv.some(arg => ['--browser-background','--ime-background'].includes(arg))) open('lookup')
 
-  // 全局快捷键 ⌥Space（Option+空格）：任何应用里都能呼出/收起查词窗
-  const shortcutOk = !process.env.WM_TEST_SUITE && globalShortcut.register('Alt+Space', toggleLookup)
+  // 全局快捷键 ⇧⌥Space（Shift+Option+空格）：任何应用里都能呼出/收起查词窗
+  const shortcutOk = !process.env.WM_TEST_SUITE && globalShortcut.register('Alt+Shift+Space', toggleLookup)
   integration.shortcuts.lookup = shortcutOk
-  if (!process.env.WM_TEST_SUITE && !shortcutOk) console.warn('[WordMate] ⌥Space 快捷键注册失败，可能被其它应用占用')
+  if (!process.env.WM_TEST_SUITE && !shortcutOk) console.warn('[WordMate] ⇧⌥Space 快捷键注册失败，可能被其它应用占用')
   // 全局快捷键 ⌥D：划词查词（选中单词后按 ⌥D，自动查词并入生词本）
   const shortcutD = !process.env.WM_TEST_SUITE && globalShortcut.register('Alt+D', lookupFromSelection)
   integration.shortcuts.selection = shortcutD
   if (!process.env.WM_TEST_SUITE && !shortcutD) console.warn('[WordMate] ⌥D 快捷键注册失败，可能被其它应用占用')
   app.on('will-quit', () => { globalShortcut.unregisterAll(); try { require('wordmate-services').unregister() } catch {} })
-  const failedShortcuts = [!shortcutOk && '⌥Space', !shortcutD && '⌥D'].filter(Boolean)
+  const failedShortcuts = [!shortcutOk && '⇧⌥Space', !shortcutD && '⌥D'].filter(Boolean)
   if (!process.env.WM_TEST_SUITE && failedShortcuts.length) new Notification({ title: 'WordMate 快捷键被占用', body: failedShortcuts.join('、') + '无法注册，请查看设置；可使用菜单栏或右键翻译。' }).show()
 
   // 启动提示：告诉用户应用在哪、怎么用
   if (!process.env.WM_TEST_SUITE && !process.argv.some(arg => ['--browser-background','--ime-background'].includes(arg))) new Notification({
     title: 'WordMate 已启动',
-    body: '菜单栏 W 图标或 ⌥Space 呼出查词；选中单词按 ⌥D 划词查词',
+    body: '菜单栏 W 图标或 ⇧⌥Space 呼出查词；选中单词按 ⌥D 划词查词',
   }).show()
   // 诊断模式：WM_WINDOWS=1 时打开全部窗口（自动化测试用）
   if (process.env.WM_WINDOWS) {

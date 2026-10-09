@@ -39,6 +39,9 @@ pub struct ShortcutsPage {
 
     /// 翻译选中文字的组合键。
     translate_selection: Retained<KeyRecorder>,
+    confirm_original: Retained<KeyRecorder>,
+    confirm_translation: Retained<KeyRecorder>,
+    insert_space: Retained<KeyRecorder>,
 }
 
 impl ShortcutsPage {
@@ -95,6 +98,35 @@ impl ShortcutsPage {
             "勾上后 ? 先进问字（中英文模式都行），后面跟字母才是问题，跟空格、回车等其他键时还原成问号；不勾问号就是问号。",
         );
         layout.space(GROUP_GAP);
+        let confirm_original = row_recorder(
+            layout,
+            mtm,
+            "选中文 / 原文",
+            Setting::ConfirmOriginalKeys,
+            false,
+            target,
+        );
+        let confirm_translation = row_recorder(
+            layout,
+            mtm,
+            "选英文译文",
+            Setting::ConfirmTranslationKeys,
+            false,
+            target,
+        );
+        let insert_space = row_recorder(
+            layout,
+            mtm,
+            "输入真正的空格",
+            Setting::InsertSpaceKeys,
+            false,
+            target,
+        );
+        note(
+            layout,
+            mtm,
+            "默认 Space 选中文，Option+Space 选英文，Tab 原样输入当前字母并加空格，不选择中文词。输入法激活时 Tab 用于空格，Shift+Tab 仍可切换焦点。组合不能重复，也不能使用回车。",
+        );
         let translation = row_recorder(
             layout,
             mtm,
@@ -142,7 +174,7 @@ impl ShortcutsPage {
         note(
             layout,
             mtm,
-            "在应用里选中一段文字再按这个键，译文（学习语言）出现在候选窗口：回车替换选中的文字，Esc 保留原文。需要开着云服务。",
+            "在应用里选中一段文字再按这个键，译文（学习语言）出现在候选窗口：Option+Space 或点击译文替换选中文字，Esc 保留原文。需要开着云服务。",
         );
         layout.space(GROUP_GAP);
         note_full(
@@ -159,7 +191,7 @@ impl ShortcutsPage {
             mtm,
             "组句中固定的键（不可改）：空格上屏首选，1–9 选词，回车原样上屏，Esc 清空；⌥⌫ 删一个音节，⌘⌫ 删到开头；\
              ⌥← / ⌥→ 按音节跳光标，⌘← / ⌘→ 到开头 / 末尾；上 / 下移动高亮，PageUp / PageDown 与 ⇧Tab 翻页；\
-             Tab 接受云端整句补全（没有就翻页）；半角标点进入英文直输段。",
+             Tab 默认输入空格；半角标点进入英文直输段。",
         );
         Self {
             page_keys,
@@ -170,10 +202,19 @@ impl ShortcutsPage {
             translation_second,
             delete_candidate,
             translate_selection,
+            confirm_original,
+            confirm_translation,
+            insert_space,
         }
     }
 
     pub fn sync(&self, config: &Config) {
+        let (original, translation, space) = config.shortcut.input_keys();
+        self.confirm_original
+            .show(&original.key_string(), &original.label());
+        self.confirm_translation
+            .show(&translation.key_string(), &translation.label());
+        self.insert_space.show(&space.key_string(), &space.label());
         let (previous, next) = config.general.page_keys();
         let pair = format!("{previous}{next}");
         select(

@@ -7,6 +7,18 @@ impl WordMateInputController {
         if chinese {
             return self.commit_source(client);
         }
+        // Already-English candidates need no model round trip or translation.
+        let english = host::with(|h| {
+            (!h.engine.composition().is_empty()
+                && h.session
+                    .candidate(h.session.highlighted)
+                    .is_some_and(|c| c.kind == qingjian_core::CandidateKind::English))
+            .then_some(h.session.highlighted)
+        })
+        .flatten();
+        if let Some(index) = english {
+            return self.commit_index(index, client);
+        }
         let snapshot = host::with(|h| {
             if !h.is_composing() || h.assistant.committing {
                 return None;
@@ -223,15 +235,25 @@ impl WordMateInputController {
         true
     }
 
-    /// 翻译窗口开着时的按键：回车 / 空格 / 1 用译文替换选区，Esc 放弃；其他键放弃并交回应用。
+    /// Explicit translation review: Space / 1 accepts, Escape cancels; Return is consumed.
     pub(crate) fn handle_translation_review(&self, key: u16, client: TextClient<'_>) -> bool {
         let job = host::with(|h| h.translation.clone()).flatten();
         let Some(job) = job else {
             return false;
         };
         match key {
-            // 回车 / 小键盘回车 / 空格 / 1：接受（译文还没到时先等）
-            36 | 76 | 49 | 18 => {
+            // Do not adopt or forward Return while a translation is being reviewed.
+            36 | 76 => {
+                host::with(|h| {
+                    h.status = Some(format!(
+                        "请点译文或按 {} 采用；Esc 取消",
+                        h.settings.config().shortcut.input_keys().1.label()
+                    ));
+                    h.render();
+                });
+                true
+            }
+            49 | 18 => {
                 if let Some(result) = job.result {
                     tracing::debug!("接受译文");
                     let valid_range = if job.composition {

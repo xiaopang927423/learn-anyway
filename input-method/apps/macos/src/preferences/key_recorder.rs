@@ -72,16 +72,17 @@ define_class!(
                 command: flags.contains(NSEventModifierFlags::Command),
             };
             // 没按修饰键的单键不算快捷键，继续等
-            if modifiers.is_empty() {
+            if modifiers.is_empty() && (self.ivars().modifiers_only || !matches!(event.keyCode(),49|48)) {
                 return;
             }
             let value = if self.ivars().modifiers_only {
                 Some((modifiers.key(), modifiers.label()))
             } else {
-                event
-                    .charactersIgnoringModifiers()
-                    .and_then(|c| c.to_string().chars().next())
-                    .filter(|c| c.is_ascii_alphanumeric())
+                match event.keyCode() {
+                    49 => Some(' '), 48 => Some('\t'),
+                    _ => event.charactersIgnoringModifiers().and_then(|c| c.to_string().chars().next()),
+                }
+                    .filter(|c| c.is_ascii_alphanumeric() || matches!(c, ' ' | '\t'))
                     .map(|c| {
                         let combo = KeyCombo {
                             modifiers,

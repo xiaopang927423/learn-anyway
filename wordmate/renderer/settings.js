@@ -77,7 +77,7 @@ $('importDiffu').onclick = () => ui.run($('importDiffu'), async () => {
 })
 async function integrations() {
   const state = await wm.getIntegration()
-  $('integration-status').textContent = `系统服务：${state.services ? '已启用' : '需运行打包应用'}；⌥Space：${state.shortcuts.lookup ? '可用' : '未注册 / 被占用'}；⌥D：${state.shortcuts.selection ? '可用' : '未注册 / 被占用'}；浏览器连接：${state.browser ? '已安装' : '未安装'}`
+  $('integration-status').textContent = `系统服务：${state.services ? '已启用' : '需运行打包应用'}；⇧⌥Space：${state.shortcuts.lookup ? '可用' : '未注册 / 被占用'}；⌥D：${state.shortcuts.selection ? '可用' : '未注册 / 被占用'}；浏览器连接：${state.browser ? '已安装' : '未安装'}`
 }
 $('browser-install').onclick = () => ui.run($('browser-install'), async () => {
   const r = await wm.installBrowser()

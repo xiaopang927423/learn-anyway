@@ -144,7 +144,7 @@ impl GeneralPage {
         row_checkbox(layout, &english);
         let sentence_confirmation = checkbox(
             mtm,
-            "选字后保留整句，确认中文 / 译文后再输入",
+            "高级：选字后暂存整句（默认关闭）",
             Setting::SentenceConfirmation,
             target,
         );
@@ -152,7 +152,7 @@ impl GeneralPage {
         note(
             layout,
             mtm,
-            "空格或数字键先选字；回车确认中文，Option+回车确认译文。关闭可恢复原版即时选词上屏。",
+            "Space 选中文 / 原文，Option+Space 选英文；Tab 原样输入当前字母并加空格。三项可在快捷键页修改。整句先正常输入和编辑，选中后按 Ctrl+Option+T 翻译；不使用回车采用译文。",
         );
         note(
             layout,

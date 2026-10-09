@@ -35,6 +35,7 @@ impl Host {
 
     /// 开始一次翻译：记下选区，窗口先显示「翻译中…」。调用方已发出请求。
     pub fn begin_translation(&mut self, range: objc2_foundation::NSRange, source: &str) {
+        self.cancel_prediction();
         self.translation = Some(TranslationJob {
             range,
             source: source.to_owned(),
@@ -159,10 +160,25 @@ impl Host {
             return;
         }
         let pages = self.session.pages();
-        let footer = if self.assistant.has_draft() {
-            Some("组句中 · ↩中文 · ⌥↩译文".into())
+        let (original, translated, space) = self.settings.config().shortcut.input_keys();
+        let footer = if self.translation.is_some() {
+            Some(format!(
+                "{} 英文 · {} 原文 · Esc 取消",
+                translated.label(),
+                original.label()
+            ))
         } else {
-            (pages > 1).then(|| format!("{}/{pages}", page + 1))
+            Some(format!(
+                "{} 中文 · {} 英文 · {} 空格{}",
+                original.label(),
+                translated.label(),
+                space.label(),
+                if pages > 1 {
+                    format!(" · {}/{pages}", page + 1)
+                } else {
+                    String::new()
+                }
+            ))
         };
         let frame = Frame {
             preedit,

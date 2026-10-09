@@ -12,7 +12,7 @@ impl WordMateInputController {
         let review = host::with(|h| h.translation.clone()).flatten();
         if translation {
             if review.is_some() {
-                self.handle_translation_review(36, client);
+                self.handle_translation_review(49, client);
             } else {
                 self.accept_wordmate(client, false);
             }
@@ -75,8 +75,7 @@ impl WordMateInputController {
             if host::with(|h| h.engine.composition().is_empty() && h.assistant.has_draft())
                 .unwrap_or(false)
             {
-                self.refresh(client);
-                return true;
+                return self.commit_source(client);
             }
             host::with(|h| {
                 if let Some((text, keys)) = h.engine.stage_candidate(&candidate) {

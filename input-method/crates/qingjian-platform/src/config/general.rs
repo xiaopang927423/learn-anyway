@@ -52,7 +52,7 @@ pub struct GeneralConfig {
     /// 英文模式（Caps Lock 亮着）是否给英文候选（补全与拼错纠正）。关掉就是纯直通。
     pub english_candidates: bool,
 
-    /// WordMate macOS: selecting Chinese keeps a sentence marked until language confirmation.
+    /// Optional marked sentence drafting; ordinary Space selection is the default.
     pub sentence_confirmation: bool,
 
     /// 繁体输出模式。
@@ -132,7 +132,7 @@ impl Default for GeneralConfig {
             font: String::new(),
             preedit: PreeditMode::default(),
             english_candidates: true,
-            sentence_confirmation: cfg!(target_os = "macos"),
+            sentence_confirmation: false,
             traditional: false,
             chinese_first: false,
             shift_letter: ShiftLetter::default(),
@@ -271,6 +271,13 @@ impl GeneralConfig {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ordinary_space_input_is_default_but_explicit_advanced_drafting_is_preserved() {
+        let defaults: GeneralConfig = toml::from_str("").unwrap();
+        assert!(!defaults.sentence_confirmation);
+        let advanced: GeneralConfig = toml::from_str("sentence_confirmation = true").unwrap();
+        assert!(advanced.sentence_confirmation);
+    }
     use super::*;
 
     #[test]

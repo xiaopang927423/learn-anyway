@@ -21,6 +21,9 @@ pub const MAX_DICTIONARIES: usize = 100;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Setting {
     SentenceConfirmation,
+    ConfirmOriginalKeys,
+    ConfirmTranslationKeys,
+    InsertSpaceKeys,
     AuxEnabled,
     AuxShow,
     AuxKeep,
@@ -215,6 +218,9 @@ impl Setting {
             Self::AuxKey => 60,
             Self::ImportAuxCode => 61,
             Self::SentenceConfirmation => 62,
+            Self::ConfirmOriginalKeys => 63,
+            Self::ConfirmTranslationKeys => 64,
+            Self::InsertSpaceKeys => 65,
             Self::AuxTableEnabled(i) => 400 + i as NSInteger,
             Self::AuxTableRemove(i) => 500 + i as NSInteger,
             Self::LearningLanguage => 1,
@@ -287,6 +293,9 @@ impl Setting {
             60 => Self::AuxKey,
             61 => Self::ImportAuxCode,
             62 => Self::SentenceConfirmation,
+            63 => Self::ConfirmOriginalKeys,
+            64 => Self::ConfirmTranslationKeys,
+            65 => Self::InsertSpaceKeys,
             400..=499 => Self::AuxTableEnabled((tag - 400) as usize),
             500..=599 => Self::AuxTableRemove((tag - 500) as usize),
             1 => Self::LearningLanguage,
@@ -368,6 +377,10 @@ mod tests {
     #[test]
     fn tags_round_trip() {
         let all = [
+            Setting::SentenceConfirmation,
+            Setting::ConfirmOriginalKeys,
+            Setting::ConfirmTranslationKeys,
+            Setting::InsertSpaceKeys,
             Setting::LearningLanguage,
             Setting::PageSize,
             Setting::PageKeys,
@@ -429,7 +442,7 @@ mod tests {
         );
         assert_eq!(
             Setting::from_tag(DICTIONARY_REMOVE_TAG_BASE + MAX_DICTIONARIES as NSInteger),
-            None
+            Some(Setting::AuxTableEnabled(0))
         );
     }
 }

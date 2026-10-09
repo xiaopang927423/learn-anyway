@@ -89,7 +89,7 @@ impl CloudPage {
         note(
             layout,
             mtm,
-            "统一使用 WordMate 的模型、密钥与 Thinking 设置。先在桌面开启输入法云辅助；输入法不保存另一套密钥。⌥↩采用当前片段译文，⇧⌥↩保留中文。",
+            "统一使用 WordMate 的模型、密钥与 Thinking 设置。先在桌面开启输入法云辅助；输入法不保存另一套密钥。Space 选中文，Option+Space 选英文，Tab 输入空格；可在快捷键页修改。",
         );
         Self {
             local_model,

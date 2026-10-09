@@ -242,23 +242,90 @@ impl WordMateInputController {
         };
         // 提示在显示：敲任何键先收掉，键照常处理
         host::with(|h| h.clear_notice());
-        // 翻译选中文字进行中：回车 / 空格 / 1 接受，Esc 放弃，其他键放弃后照常交给应用
-        if host::with(|h| h.translation.is_some()).unwrap_or(false) {
-            if (key == 36 || key == 76)
-                && (!option || shift)
-                && host::with(|h| h.translation.as_ref().is_some_and(|job| job.composition))
-                    .unwrap_or(false)
-            {
-                let committed = self.commit_source(client);
-                host::with(|h| h.end_translation());
-                return committed;
+        let key_char = match key {
+            49 => Some(' '),
+            48 => Some('\t'),
+            _ => event
+                .charactersIgnoringModifiers()
+                .and_then(|c| c.to_string().chars().next())
+                .map(|c| c.to_ascii_lowercase()),
+        };
+        let (original, translated, space) =
+            host::with(|h| h.settings.config().shortcut.input_keys())
+                .unwrap_or_else(|| qingjian_platform::ShortcutConfig::default().input_keys());
+        let matches = |combo: qingjian_platform::KeyCombo| {
+            pressed == combo.modifiers && key_char == Some(combo.key)
+        };
+        if matches(translated) {
+            if host::with(|h| h.translation.is_some()).unwrap_or(false) {
+                return self.handle_translation_review(49, client);
             }
-            if self.handle_translation_review(key, client) {
+            if host::with(|h| h.is_composing()).unwrap_or(false) {
+                return self.accept_wordmate(client, false);
+            }
+            return false;
+        }
+        if matches(space) {
+            host::with(|h| h.end_translation());
+            if host::with(|h| h.is_composing()).unwrap_or(false) {
+                self.commit_raw(client);
+            }
+            client.insert_text(" ");
+            host::with(|h| h.assistant.note_text(" "));
+            return true;
+        }
+        if matches(original) {
+            if let Some(job) = host::with(|h| h.translation.clone()).flatten() {
+                host::with(|h| h.end_translation());
+                if job.composition {
+                    self.refresh(client);
+                }
                 return true;
             }
+            if host::with(|h| h.is_composing()).unwrap_or(false) {
+                if host::with(|h| h.assistant.has_draft()).unwrap_or(false) {
+                    return self.commit_source(client);
+                }
+                // Space means Chinese/original even if automatic English ranking
+                // put an English spelling above the Chinese interpretation.
+                let chinese = host::with(|h| {
+                    h.session
+                        .candidate(h.session.highlighted)
+                        .filter(|c| c.kind == qingjian_core::CandidateKind::English)
+                        .and_then(|_| {
+                            (0..h.session.layout.len()).find(|&i| {
+                                h.session.candidate(i).is_some_and(|c| {
+                                    matches!(
+                                        c.kind,
+                                        qingjian_core::CandidateKind::Chinese
+                                            | qingjian_core::CandidateKind::Sentence
+                                    )
+                                })
+                            })
+                        })
+                })
+                .flatten();
+                if let Some(index) = chinese {
+                    return self.commit_index(index, client);
+                }
+                return self.commit_highlighted(client);
+            }
+            if original.key == ' ' {
+                client.insert_text(" ");
+                host::with(|h| h.assistant.note_text(" "));
+                return true;
+            }
+            return false;
         }
-        if option && !command && !control && (key == 36 || key == 76) && !secure_input::enabled() {
-            return self.accept_wordmate(client, shift);
+        // Return during explicit translation review is consumed; it cannot send.
+        if host::with(|h| h.translation.is_some()).unwrap_or(false) {
+            if key == 36 || key == 76 || key == 53 {
+                return self.handle_translation_review(key, client);
+            }
+            host::with(|h| h.end_translation());
+            if host::with(|h| h.is_composing()).unwrap_or(false) {
+                self.refresh(client);
+            }
         }
         // 翻译快捷键（不在组句中）：读应用里的选区，交给云端
         let typed = event
@@ -327,7 +394,12 @@ impl WordMateInputController {
         // Space is a physical word boundary. Some IMK clients report an empty
         // characters string for it; still route it through the mixed-input policy.
         if key == 49 && !option {
-            return self.handle_text(" ", client);
+            if host::with(|h| h.is_composing()).unwrap_or(false) {
+                self.commit_raw(client);
+            }
+            client.insert_text(" ");
+            host::with(|h| h.assistant.note_text(" "));
+            return true;
         }
         match event.characters() {
             Some(text) if !text.is_empty() => self.handle_text(&text.to_string(), client),

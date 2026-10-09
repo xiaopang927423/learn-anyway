@@ -24,6 +24,9 @@ pub struct ShortcutConfig {
 
     /// 把应用里选中的文字译成学习语言（需要云服务开着）。
     pub translate_selection: KeyCombo,
+    pub confirm_original: KeyCombo,
+    pub confirm_translation: KeyCombo,
+    pub insert_space: KeyCombo,
 
     /// 数字键配这些修饰键：删掉候选（用户词整个删掉，词库词清掉对它的学习）。
     pub delete_candidate: Modifiers,
@@ -42,12 +45,52 @@ impl Default for ShortcutConfig {
             translation,
             translation_second,
             translate_selection: KeyCombo::TRANSLATE_DEFAULT,
+            confirm_original: KeyCombo {
+                modifiers: Modifiers::default(),
+                key: ' ',
+            },
+            confirm_translation: KeyCombo {
+                modifiers: Modifiers::OPTION,
+                key: ' ',
+            },
+            insert_space: KeyCombo {
+                modifiers: Modifiers::default(),
+                key: '\t',
+            },
             delete_candidate: Modifiers::SHIFT,
         }
     }
 }
 
 impl ShortcutConfig {
+    pub fn valid_input_keys(&self) -> bool {
+        let keys = [
+            self.confirm_original,
+            self.confirm_translation,
+            self.insert_space,
+            self.translate_selection,
+        ];
+        let desktop_lookup = KeyCombo {
+            modifiers: Modifiers::SHIFT_OPTION,
+            key: ' ',
+        };
+        let desktop_selection = KeyCombo {
+            modifiers: Modifiers::OPTION,
+            key: 'd',
+        };
+        !keys.contains(&desktop_lookup)
+            && !keys.contains(&desktop_selection)
+            && (0..keys.len()).all(|i| (i + 1..keys.len()).all(|j| keys[i] != keys[j]))
+    }
+    pub fn input_keys(&self) -> (KeyCombo, KeyCombo, KeyCombo) {
+        let c = if self.valid_input_keys() {
+            *self
+        } else {
+            Self::default()
+        };
+        (c.confirm_original, c.confirm_translation, c.insert_space)
+    }
+
     /// 删候选的修饰键；为空或与任一组译词键撞了就退回缺省。
     pub fn delete_keys(&self) -> Modifiers {
         let (first, second) = self.translation_keys();
@@ -78,6 +121,25 @@ impl ShortcutConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn input_contract_round_trips_and_rejects_collisions_or_return() {
+        let c: ShortcutConfig = toml::from_str("").unwrap();
+        let (original, translated, space) = c.input_keys();
+        assert_eq!(original.key_string(), "space");
+        assert_eq!(translated.key_string(), "option+space");
+        assert_eq!(space.key_string(), "tab");
+        let custom: ShortcutConfig = toml::from_str("confirm_original = 'control+j'\nconfirm_translation = 'option+e'\ninsert_space = 'shift+space'\n").unwrap();
+        assert_eq!(custom.input_keys().2.key_string(), "shift+space");
+        let restored: ShortcutConfig = toml::from_str(&toml::to_string(&custom).unwrap()).unwrap();
+        assert_eq!(restored.input_keys(), custom.input_keys());
+        let conflict: ShortcutConfig = toml::from_str("confirm_translation = 'space'").unwrap();
+        assert!(!conflict.valid_input_keys());
+        assert_eq!(conflict.input_keys(), c.input_keys());
+        for unsafe_key in ["return", "enter", "option+return", "option+enter"] {
+            assert!(unsafe_key.parse::<KeyCombo>().is_err());
+        }
+    }
 
     #[test]
     fn old_files_without_modifier_keys_still_parse_and_get_defaults() {

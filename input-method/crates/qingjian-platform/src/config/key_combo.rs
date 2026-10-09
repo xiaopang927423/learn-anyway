@@ -29,16 +29,26 @@ impl KeyCombo {
 
     /// 配置文件里的写法。
     pub fn key_string(&self) -> String {
-        format!("{}+{}", self.modifiers.key(), self.key)
+        let key = match self.key {
+            ' ' => "space".into(),
+            '\t' => "tab".into(),
+            c => c.to_string(),
+        };
+        if self.modifiers.is_empty() {
+            key
+        } else {
+            format!("{}+{key}", self.modifiers.key())
+        }
     }
 
     /// 给人看的写法：`⌃⌥T`。
     pub fn label(&self) -> String {
-        format!(
-            "{}{}",
-            self.modifiers.label(),
-            self.key.to_ascii_uppercase()
-        )
+        let key = match self.key {
+            ' ' => "Space".into(),
+            '\t' => "Tab".into(),
+            c => c.to_ascii_uppercase().to_string(),
+        };
+        format!("{}{key}", self.modifiers.label())
     }
 }
 
@@ -52,19 +62,31 @@ impl FromStr for KeyCombo {
     type Err = String;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let (modifiers, key) = text
-            .trim()
-            .rsplit_once('+')
-            .ok_or_else(|| format!("expected modifiers+key, got {text:?}"))?;
-        let mut chars = key.trim().chars();
-        let (Some(key), None) = (chars.next(), chars.next()) else {
-            return Err(format!("key must be a single character: {key:?}"));
+        let text = text.trim();
+        let (mods, name) = text.rsplit_once('+').unwrap_or(("", text));
+        let special = match name.trim().to_ascii_lowercase().as_str() {
+            "space" => Some(' '),
+            "tab" => Some('\t'),
+            _ => None,
         };
-        if !key.is_ascii_alphanumeric() {
-            return Err(format!("key must be a letter or digit: {key:?}"));
-        }
+        let key = if let Some(key) = special {
+            key
+        } else {
+            let mut chars = name.trim().chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) if c.is_ascii_alphanumeric() && !mods.is_empty() => {
+                    c.to_ascii_lowercase()
+                }
+                _ => return Err("请使用 Space、Tab 或带修饰键的字母/数字；不能使用回车".into()),
+            }
+        };
+        let modifiers = if mods.is_empty() {
+            Modifiers::default()
+        } else {
+            mods.parse()?
+        };
         Ok(Self {
-            modifiers: modifiers.parse()?,
+            modifiers,
             key: key.to_ascii_lowercase(),
         })
     }
