@@ -22,20 +22,21 @@ impl WordMateInputController {
         if source_is_english {
             return self.commit_source(client);
         }
-        // Already-English candidates need no model round trip or translation.
+        // Choosing an English source inside Chinese adopts that source, not a translation of the Chinese prefix.
         let english = host::with(|h| {
-            (!h.assistant.has_draft()
-                && h.assistant.target != "en"
-                && !h.engine.composition().is_empty()
+            !h.engine.composition().is_empty()
                 && h.session
                     .candidate(h.session.highlighted)
-                    .is_some_and(|c| c.kind == qingjian_core::CandidateKind::English))
-            .then_some(h.session.highlighted)
+                    .is_some_and(|c| c.kind == qingjian_core::CandidateKind::English)
         })
-        .flatten();
-        if let Some(index) = english {
-            return self.commit_index(index, client);
+        .unwrap_or(false);
+        if english {
+            return self.confirm_source(client);
         }
+        self.adopt_translation(client)
+    }
+
+    fn adopt_translation(&self, client: TextClient<'_>) -> bool {
         let snapshot = host::with(|h| {
             if !h.is_composing() || h.assistant.committing {
                 return None;
@@ -319,7 +320,7 @@ impl WordMateInputController {
                             h.assistant.text = Some(result.clone());
                             h.assistant.meaning = job.source.clone();
                         });
-                        return self.accept_wordmate(client, false);
+                        return self.adopt_translation(client);
                     }
                     let confirmed = client.replace_range_verified(&result, job.range);
                     host::with(|h| {

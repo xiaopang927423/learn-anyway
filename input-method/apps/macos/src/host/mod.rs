@@ -194,7 +194,7 @@ thread_local! {
 }
 
 /// 激活期间学习数据最多隔这么久落一次盘。
-const LEARNING_FLUSH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+const LEARNING_FLUSH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// 输入统计文件名，与学习数据同目录（按天一行，见 `qingjian-learning::UsageStats`）。
 const USAGE_FILE: &str = "usage.tsv";

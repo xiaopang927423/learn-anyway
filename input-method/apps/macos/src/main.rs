@@ -7,6 +7,7 @@
 
 mod app;
 mod assistant_panel;
+mod candidate_fallback;
 mod candidates;
 mod error;
 mod host;

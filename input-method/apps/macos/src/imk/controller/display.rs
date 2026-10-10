@@ -73,6 +73,10 @@ impl WordMateInputController {
                     },
                 );
             }
+            crate::candidate_fallback::ensure_literal(
+                &mut candidates,
+                &h.engine.composition().typed_text(),
+            );
             let draft = h.assistant.draft_text();
             if !draft.is_empty() {
                 marked = format!("{draft}{marked}");
@@ -99,6 +103,11 @@ impl WordMateInputController {
                     });
                 }
             }
+            crate::candidate_fallback::ensure(
+                &mut candidates,
+                &h.engine.composition().typed_text(),
+                &draft,
+            );
             if let Some(position) = h.assistant.draft_cursor {
                 cursor = position.min(marked.chars().count());
                 preedit = Preedit::plain(&marked, cursor);

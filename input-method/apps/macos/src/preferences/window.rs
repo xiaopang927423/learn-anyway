@@ -104,7 +104,7 @@ impl PreferencesWindow {
 
         let mut layout = new_layout();
         let phrases = PhrasesPage::build(&mut layout, mtm, &target);
-        pages.push(page("自定义短语", layout));
+        pages.push(page("常用词条", layout));
 
         let mut layout = new_layout();
         let fuzzy = FuzzyPage::build(&mut layout, mtm, &target);

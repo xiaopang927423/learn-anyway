@@ -722,3 +722,61 @@ fn input_log_records_the_session_and_page_turns() {
     };
     assert_eq!(commit.pages, 2);
 }
+
+#[test]
+fn confirmed_personal_phrase_can_be_recalled_and_respects_learning_switch() {
+    let mut engine = engine().with_learner(Box::new(WordLearner::default()));
+    let parts: Vec<_> = [("星", "xing"), ("河", "he")]
+        .into_iter()
+        .map(|(text, key)| {
+            (
+                Candidate {
+                    text: text.into(),
+                    kind: CandidateKind::Chinese,
+                    syllables: vec![key.into()],
+                    reading: None,
+                    translation: None,
+                    aux_code: None,
+                },
+                key.into(),
+            )
+        })
+        .collect();
+    engine.remember_confirmed_phrase(&parts, "星河");
+    assert_eq!(engine.learner().choice_weight("xinghe", "星河"), 1);
+    engine.set_input("xinghe");
+    assert!(
+        engine
+            .query()
+            .unwrap()
+            .candidates
+            .items
+            .iter()
+            .any(|c| c.text == "星河")
+    );
+    engine.set_learning(false);
+    engine.remember_confirmed_phrase(&parts, "星河");
+    assert_eq!(engine.learner().choice_weight("xinghe", "星河"), 1);
+    engine.set_learning(true);
+    engine.set_private(true);
+    engine.remember_confirmed_phrase(&parts, "星河");
+    assert_eq!(engine.learner().choice_weight("xinghe", "星河"), 1);
+}
+
+#[test]
+fn personal_phrase_does_not_guess_readings_for_edited_or_translated_text() {
+    let mut engine = engine().with_learner(Box::new(WordLearner::default()));
+    let parts = vec![(
+        Candidate {
+            text: "星河".into(),
+            kind: CandidateKind::Generated,
+            syllables: vec![],
+            reading: None,
+            translation: None,
+            aux_code: None,
+        },
+        "xinghe".into(),
+    )];
+    engine.remember_confirmed_phrase(&parts, "星河");
+    assert!(engine.learner().user_words().is_none());
+}

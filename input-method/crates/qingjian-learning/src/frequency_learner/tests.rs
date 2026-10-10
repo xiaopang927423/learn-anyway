@@ -296,3 +296,61 @@ fn english_words_round_trip_through_tsv_and_form_a_word_list() {
     let saved = std::fs::read_to_string(FrequencyLearner::english_path(&path)).unwrap();
     assert!(saved.contains("gist\t2"));
 }
+
+#[test]
+fn confirmed_phrase_survives_reload_and_participates_in_candidates() {
+    use qingjian_core::{CandidateKind, Engine};
+    let dir = std::env::temp_dir().join(format!(
+        "wordmate-confirmed-phrase-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("user.tsv");
+    let dictionary = || Dictionary::parse("星\txing\t100\n河\the\t100\n").unwrap();
+    let mut engine = Engine::new(dictionary())
+        .with_learner(Box::new(FrequencyLearner::from_path(&path).unwrap()));
+    let parts: Vec<_> = [("星", "xing"), ("河", "he")]
+        .into_iter()
+        .map(|(text, key)| {
+            (
+                Candidate {
+                    text: text.into(),
+                    kind: CandidateKind::Chinese,
+                    syllables: vec![key.into()],
+                    reading: None,
+                    translation: None,
+                    aux_code: None,
+                },
+                key.into(),
+            )
+        })
+        .collect();
+    engine.remember_confirmed_phrase(&parts, "星河");
+    engine.flush_learning();
+    let restored = FrequencyLearner::from_path(&path).unwrap();
+    assert_eq!(restored.choice_weight("xinghe", "星河"), 1);
+    assert_eq!(
+        restored
+            .user_words()
+            .unwrap()
+            .lookup(&["xing", "he"], false)[0]
+            .text,
+        "星河"
+    );
+    let mut reopened = Engine::new(dictionary()).with_learner(Box::new(restored));
+    reopened.set_input("xinghe");
+    assert!(
+        reopened
+            .query()
+            .unwrap()
+            .candidates
+            .items
+            .iter()
+            .any(|c| c.text == "星河")
+    );
+    std::fs::remove_dir_all(dir).unwrap();
+}

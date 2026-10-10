@@ -107,6 +107,14 @@ impl WordMateInputController {
     }
 
     pub(crate) fn commit_source(&self, client: TextClient<'_>) -> bool {
+        self.commit_source_with(client, true)
+    }
+
+    pub(super) fn confirm_source(&self, client: TextClient<'_>) -> bool {
+        self.commit_source_with(client, false)
+    }
+
+    fn commit_source_with(&self, client: TextClient<'_>, whole: bool) -> bool {
         let (owned, cursor) = host::with(|h| {
             let draft = h.assistant.draft_text();
             let query = h.engine.query().ok();
@@ -181,7 +189,11 @@ impl WordMateInputController {
                     keys,
                     text,
                 });
+                if !whole {
+                    break;
+                }
             }
+            let remaining = h.engine.composition().typed_text();
             let output = h.assistant.draft_text();
             let parts: Vec<_> = h
                 .assistant
@@ -193,19 +205,21 @@ impl WordMateInputController {
             if output.is_empty() {
                 return None;
             }
-            h.engine.commit_staged(&parts, &output);
             h.assistant.draft.clear();
             h.assistant.draft_cursor = None;
-            Some(output)
+            Some((output, parts, remaining))
         })
         .flatten();
-        let Some(output) = output else {
+        let Some((output, parts, remaining)) = output else {
             return false;
         };
         let confirmed = client.insert_composition_verified(&output, &owned, cursor);
         host::with(|h| {
             h.assistant.note_text(&output);
             if confirmed {
+                h.engine.commit_staged(&parts, &output);
+                h.engine.remember_confirmed_phrase(&parts, &output);
+                h.engine.set_input(&remaining);
                 for word in &staged {
                     if word.candidate.kind != qingjian_core::CandidateKind::English
                         && word.text != word.candidate.text

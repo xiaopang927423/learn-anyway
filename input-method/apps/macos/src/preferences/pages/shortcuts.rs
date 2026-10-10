@@ -101,7 +101,7 @@ impl ShortcutsPage {
         let confirm_original = row_recorder(
             layout,
             mtm,
-            "选中文 / 原文",
+            "当前候选上屏",
             Setting::ConfirmOriginalKeys,
             false,
             target,
@@ -125,7 +125,7 @@ impl ShortcutsPage {
         note(
             layout,
             mtm,
-            "默认 Space 选中文，Option+Space 选英文，Tab 原样输入当前字母并加空格，不选择中文词。输入法激活时 Tab 用于空格，Shift+Tab 仍可切换焦点。组合不能重复，也不能使用回车。",
+            "默认 Space 一次采用当前候选（包含混输英文），Option+Space 选英文，Tab 在草稿中保留字母并加空格。输入法激活时 Tab 用于空格，Shift+Tab 仍可切换焦点。组合不能重复，也不能使用回车。",
         );
         let translation = row_recorder(
             layout,

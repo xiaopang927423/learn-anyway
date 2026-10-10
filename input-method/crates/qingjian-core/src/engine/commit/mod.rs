@@ -126,6 +126,58 @@ impl Engine {
         );
     }
 
+    /// Remember an explicitly adopted Chinese phrase without guessing readings for edited/raw text.
+    /// Caller must confirm actual text insertion first. MutedLearner respects private/learning switches.
+    pub fn remember_confirmed_phrase(&mut self, parts: &[(Candidate, String)], output: &str) {
+        let count = output.chars().count();
+        if !(2..=32).contains(&count)
+            || !output
+                .chars()
+                .all(|c| ('\u{3400}'..='\u{9fff}').contains(&c))
+        {
+            return;
+        }
+        let source: String = parts.iter().map(|(c, _)| c.text.as_str()).collect();
+        if source != output
+            || parts.iter().any(|(c, keys)| {
+                keys.is_empty()
+                    || !matches!(
+                        c.kind,
+                        CandidateKind::Chinese | CandidateKind::Sentence | CandidateKind::Cloud
+                    )
+                    || c.syllables.len() != c.text.chars().count()
+            })
+        {
+            return;
+        }
+        let syllables: Vec<String> = parts
+            .iter()
+            .flat_map(|(c, _)| c.syllables.clone())
+            .collect();
+        if syllables.len() != count {
+            return;
+        }
+        self.learner.learn_word(output, &syllables);
+        if parts.len() > 1 || parts[0].0.kind == CandidateKind::Sentence {
+            let key: String = parts
+                .iter()
+                .flat_map(|(_, keys)| keys.chars())
+                .filter(|c| c.is_ascii_alphabetic())
+                .flat_map(char::to_lowercase)
+                .collect();
+            self.learner.record_choice(&key, output);
+            self.learner.record(&Candidate {
+                text: output.into(),
+                syllables,
+                kind: CandidateKind::Chinese,
+                reading: None,
+                translation: None,
+                aux_code: None,
+            });
+        }
+        self.forget_span_cache();
+    }
+
     /// 候选比输入短时（`kaifazhe` 选了 开发），剩余拼音留在缓冲区，壳应接着 [`Self::query`]。
     /// 候选的最后一个音节比输入长时（`kaif` 选了 开发），把输入吃完。
     pub fn commit(&mut self, candidate: &Candidate) -> String {

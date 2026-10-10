@@ -97,6 +97,10 @@ impl CandidateWindow {
         }
     }
 
+    pub(crate) fn is_visible(&self) -> bool {
+        self.panel.isVisible()
+    }
+
     pub fn hide(&self) {
         self.panel.orderOut(None);
     }

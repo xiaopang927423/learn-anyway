@@ -74,7 +74,147 @@ pub(crate) fn run() {
         );
     };
     let none = NSEventModifierFlags::empty();
+    host::with(|h| h.sentence_confirmation = true);
+    for c in "nihao".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    event(" ", 49, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "你好");
+    assert_eq!(
+        fixture.ivars().inserts.get(),
+        1,
+        "one Space must adopt even with staging enabled"
+    );
+    assert!(fixture.ivars().marked.borrow().is_empty());
     host::with(|h| {
+        assert!(
+            !h.window.is_visible(),
+            "confirmed complete input must close the window"
+        )
+    });
+    fixture.ivars().inserts.set(0);
+    for c in "nihaoma".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        h.session.highlighted = (0..h.session.layout.len())
+            .find(|&i| {
+                h.session.candidate(i).is_some_and(|c| {
+                    c.text == "你" && c.kind == qingjian_core::CandidateKind::Chinese
+                })
+            })
+            .expect("partial candidate")
+    });
+    event(" ", 49, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "你");
+    assert_eq!(fixture.ivars().inserts.get(), 1);
+    host::with(|h| {
+        assert_eq!(
+            h.engine.composition().typed_text(),
+            "haoma",
+            "unselected suffix must remain editable"
+        )
+    });
+    host::with(|h| h.engine.clear());
+    controller.refresh(client);
+    host::with(|h| {
+        h.assistant.set_edited_draft("例如这种".into(), 4);
+        h.assistant.draft_cursor = None;
+        h.assistant.context.clear();
+    });
+    for c in "space".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        h.session.highlighted = (0..h.session.layout.len())
+            .find(|&i| {
+                h.session.candidate(i).is_some_and(|c| {
+                    c.kind == qingjian_core::CandidateKind::English && c.text == "space"
+                })
+            })
+            .expect("mixed English candidate");
+    });
+    event(" ", 49, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "例如这种space");
+    assert_eq!(
+        fixture.ivars().inserts.get(),
+        2,
+        "mixed English must adopt once, without substituting Chinese"
+    );
+    assert!(fixture.ivars().marked.borrow().is_empty());
+    host::with(|h| {
+        h.assistant.set_edited_draft("例如这种".into(), 4);
+        h.assistant.draft_cursor = None;
+    });
+    for c in "space".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        h.session.highlighted = (0..h.session.layout.len())
+            .find(|&i| {
+                h.session.candidate(i).is_some_and(|c| {
+                    c.kind == qingjian_core::CandidateKind::English && c.text == "space"
+                })
+            })
+            .unwrap()
+    });
+    event(" ", 49, NSEventModifierFlags::Option);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "例如这种space");
+    assert_eq!(
+        fixture.ivars().inserts.get(),
+        3,
+        "Option-Space must preserve Chinese around an English source"
+    );
+    host::with(|h| {
+        h.assistant.set_edited_draft("例如这种".into(), 4);
+        h.assistant.draft_cursor = None;
+    });
+    for c in "diffu".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        h.session.highlighted = (0..h.session.layout.len())
+            .find(|&i| {
+                h.session.candidate(i).is_some_and(|c| {
+                    c.kind == qingjian_core::CandidateKind::English && c.text == "diffu"
+                })
+            })
+            .expect("unknown English must remain selectable")
+    });
+    event(" ", 49, NSEventModifierFlags::Option);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "例如这种diffu");
+    assert_eq!(fixture.ivars().inserts.get(), 4);
+    host::with(|h| {
+        assert!(
+            h.engine
+                .learner()
+                .user_english()
+                .is_some_and(|words| words.get("diffu").is_some()),
+            "adopted unknown English must enter personal dictionary"
+        )
+    });
+    host::with(|h| {
+        h.engine.set_input("nihao");
+        h.session.reset(None, vec![], h.page_size, 0);
+        h.window.hide();
+        h.render();
+        assert!(
+            h.session.candidate(h.session.highlighted).is_some(),
+            "lost session must recover local candidate"
+        );
+        assert!(
+            h.window.is_visible(),
+            "owned input must recover its candidate window"
+        );
+        h.engine.clear();
+        h.sentence_confirmation = false;
+    });
+    fixture.ivars().marked.borrow_mut().clear();
+    fixture.ivars().committed.borrow_mut().clear();
+    fixture.ivars().cursor.set(0);
+    fixture.ivars().inserts.set(0);
+    host::with(|h| {
+        h.assistant.invalidate(true);
         h.engine.clear();
         h.assistant.draft.clear();
         h.assistant.draft_cursor = None;
@@ -97,7 +237,9 @@ pub(crate) fn run() {
             .expect("breakfast candidate");
         h.session.highlighted = index;
     });
-    event(" ", 49, none);
+    // Conversion via candidate click stays in draft; Space itself now adopts immediately.
+    let breakfast_index = host::with(|h| h.session.highlighted).unwrap();
+    controller.choose_candidate(breakfast_index, client, false);
     assert_eq!(&*fixture.ivars().marked.borrow(), "I want to eat 早餐");
     event("", 123, NSEventModifierFlags::Command);
     event("", 124, none);
@@ -218,6 +360,6 @@ pub(crate) fn run() {
         h.active_input = None;
     });
     println!(
-        "IME_INTERACTION_OK dispatch Tab, mixed composition, original selection, caret editing, Option-Space adoption; one app insertion per adoption, highlighted candidate, selected-text adoption, Enter guard, confirmed fragment/selection learning"
+        "IME_INTERACTION_OK dispatch Tab, mixed composition, original selection, caret editing, Option-Space adoption; one app insertion per adoption, highlighted candidate, selected-text adoption, Enter guard, confirmed fragment/selection learning, one-Space adoption, mixed-English source, candidate-window recovery"
     );
 }

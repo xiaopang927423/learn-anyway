@@ -277,40 +277,19 @@ impl WordMateInputController {
         if matches(original) {
             if let Some(job) = host::with(|h| h.translation.clone()).flatten() {
                 host::with(|h| h.end_translation());
-                if job.composition {
-                    self.refresh(client);
+                if !job.composition {
+                    return true;
                 }
-                return true;
+                self.refresh(client);
+                if let Some(candidate) = job.source_candidate {
+                    host::with(|h| h.session.reset(None, vec![candidate], h.page_size, 0));
+                }
+                return self.confirm_source(client);
             }
             if host::with(|h| h.is_composing()).unwrap_or(false) {
-                if host::with(|h| h.assistant.has_draft()).unwrap_or(false) {
-                    if host::with(|h| h.engine.composition().is_empty()).unwrap_or(false) {
-                        return self.commit_source(client);
-                    }
-                }
-                // Space means Chinese/original even if automatic English ranking
-                // put an English spelling above the Chinese interpretation.
-                let chinese = host::with(|h| {
-                    h.session
-                        .candidate(h.session.highlighted)
-                        .filter(|c| c.kind == qingjian_core::CandidateKind::English)
-                        .and_then(|_| {
-                            (0..h.session.layout.len()).find(|&i| {
-                                h.session.candidate(i).is_some_and(|c| {
-                                    matches!(
-                                        c.kind,
-                                        qingjian_core::CandidateKind::Chinese
-                                            | qingjian_core::CandidateKind::Sentence
-                                    )
-                                })
-                            })
-                        })
-                })
-                .flatten();
-                if let Some(index) = chinese {
-                    return self.commit_index(index, client);
-                }
-                return self.commit_highlighted(client);
+                // Confirm the highlighted source exactly once, including English inside Chinese.
+                // Numeric/mouse selection may still convert a draft without adopting it.
+                return self.confirm_source(client);
             }
             if original.key == ' ' {
                 client.insert_text(" ");

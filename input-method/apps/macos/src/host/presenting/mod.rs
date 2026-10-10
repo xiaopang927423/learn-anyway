@@ -93,6 +93,29 @@ impl Host {
 
     /// 按会话状态画候选窗口。候选为空且没有 preedit 时收窗。
     pub fn render(&mut self) {
+        if self.translation.is_none()
+            && self.is_composing()
+            && !(0..self.session.layout.len()).any(|i| self.session.candidate(i).is_some())
+        {
+            let raw = self.engine.composition().typed_text();
+            let draft = self.assistant.draft_text();
+            let mut candidates = self
+                .engine
+                .query()
+                .ok()
+                .map(|q| q.candidates.items)
+                .unwrap_or_default();
+            crate::candidate_fallback::ensure(&mut candidates, &raw, &draft);
+            crate::candidate_fallback::ensure_literal(&mut candidates, &raw);
+            if !candidates.is_empty() {
+                let text = format!("{draft}{raw}");
+                let cursor = self
+                    .assistant
+                    .draft_cursor
+                    .unwrap_or_else(|| text.chars().count());
+                self.reset_session(Preedit::plain(&text, cursor), candidates);
+            }
+        }
         let size = self.session.layout.page_size();
         let page = self.session.page;
         // 横排展开成矩阵时画视口里的几行，序号只标在高亮所在那一行（数字键选的就是它）；单行时只画当前页
@@ -171,7 +194,7 @@ impl Host {
             ))
         } else {
             Some(format!(
-                "{} 中文 · {} 英文 · {} 草稿空格{}",
+                "{} 上屏 · {} 英文 · {} 草稿空格{}",
                 original.label(),
                 translated.label(),
                 space.label(),

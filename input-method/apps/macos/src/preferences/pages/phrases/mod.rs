@@ -98,7 +98,7 @@ impl PhrasesPage {
         note_full(
             layout,
             mtm,
-            "勾选启用，双击一行编辑。长文本仅在列表中缩略显示。 ",
+            "这里可以保存自己常用或容易输错的词条。点 + 设置输入码和正确内容，保存后立即参与候选；双击可纠正，− 可删除，重启仍保留。长文本仅在列表中缩略显示。 ",
         );
         let system_replacements = checkbox(
             mtm,
