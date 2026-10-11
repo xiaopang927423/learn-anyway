@@ -108,8 +108,18 @@ impl WordMateInputController {
                 &h.engine.composition().typed_text(),
                 &draft,
             );
-            if let Some(position) = h.assistant.draft_cursor {
-                cursor = position.min(marked.chars().count());
+            if h.assistant.draft_cursor.is_some() {
+                let query = h.engine.query().ok();
+                let token = query
+                    .as_ref()
+                    .map(|q| q.marked_text())
+                    .unwrap_or_else(|| h.engine.composition().typed_text());
+                let token_cursor = query
+                    .as_ref()
+                    .map(|q| q.marked_cursor())
+                    .unwrap_or_else(|| h.engine.composition().cursor());
+                marked = h.assistant.composition_text(&token);
+                cursor = h.assistant.composition_cursor(token_cursor);
                 preedit = Preedit::plain(&marked, cursor);
             }
             h.reset_session(preedit, candidates);
@@ -117,7 +127,9 @@ impl WordMateInputController {
             (
                 marked,
                 cursor,
-                h.preedit_mode.inline() || h.assistant.has_draft(),
+                h.preedit_mode.inline()
+                    || h.assistant.has_draft()
+                    || h.assistant.draft_cursor.is_some(),
             )
         }) else {
             return;
@@ -171,7 +183,7 @@ impl WordMateInputController {
                         .as_ref()
                         .and_then(|t| t.senses().first())
                         .map(|s| s.text.as_str());
-                    let source = format!("{}{}", h.assistant.draft_text(), c.text);
+                    let source = h.assistant.composition_text(&c.text);
                     let local = if h.assistant.has_draft()
                         && !(h.assistant.draft.len() == 1 && c.text.is_empty())
                     {
@@ -236,7 +248,7 @@ impl WordMateInputController {
                     aux_code: None,
                 };
                 if let Some((text, keys)) = h.engine.stage_candidate(&candidate) {
-                    h.assistant.draft.push(crate::wordmate::DraftWord {
+                    h.assistant.stage_word(crate::wordmate::DraftWord {
                         candidate,
                         keys,
                         text,

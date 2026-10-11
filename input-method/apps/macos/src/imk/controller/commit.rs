@@ -49,7 +49,7 @@ impl WordMateInputController {
                     let text = h.engine.composition().typed_text();
                     h.engine.clear();
                     if !text.is_empty() {
-                        h.assistant.draft.push(crate::wordmate::DraftWord {
+                        h.assistant.stage_word(crate::wordmate::DraftWord {
                             candidate: qingjian_core::Candidate {
                                 text: text.clone(),
                                 kind: qingjian_core::CandidateKind::Generated,
@@ -83,7 +83,7 @@ impl WordMateInputController {
             }
             host::with(|h| {
                 if let Some((text, keys)) = h.engine.stage_candidate(&candidate) {
-                    h.assistant.draft.push(crate::wordmate::DraftWord {
+                    h.assistant.stage_word(crate::wordmate::DraftWord {
                         candidate: candidate.clone(),
                         keys,
                         text,
@@ -116,27 +116,34 @@ impl WordMateInputController {
 
     fn commit_source_with(&self, client: TextClient<'_>, whole: bool) -> bool {
         let (owned, cursor) = host::with(|h| {
-            let draft = h.assistant.draft_text();
+            if !h.preedit_mode.inline()
+                && !h.assistant.has_draft()
+                && h.assistant.draft_cursor.is_none()
+            {
+                return (String::new(), 0);
+            }
+            if let Some(preedit) = &h.session.preedit {
+                return (preedit.text(), preedit.cursor);
+            }
             let query = h.engine.query().ok();
-            let cursor = h.assistant.draft_cursor.unwrap_or_else(|| {
-                draft.chars().count()
-                    + query
-                        .as_ref()
-                        .map(|query| query.marked_cursor())
-                        .unwrap_or(0)
-            });
+            let token = query
+                .as_ref()
+                .map(|q| q.marked_text())
+                .unwrap_or_else(|| h.engine.composition().typed_text());
+            let cursor = query
+                .as_ref()
+                .map(|q| q.marked_cursor())
+                .unwrap_or_else(|| h.engine.composition().cursor());
             (
-                format!(
-                    "{}{}",
-                    draft,
-                    query.map(|query| query.marked_text()).unwrap_or_default()
-                ),
-                cursor,
+                h.assistant.composition_text(&token),
+                h.assistant.composition_cursor(cursor),
             )
         })
         .unwrap_or_default();
         let staged = host::with(|h| h.assistant.draft.clone()).unwrap_or_default();
         let output = host::with(|h| {
+            let editor = h.assistant.draft_cursor.is_some();
+            let mut chosen = Vec::new();
             let mut initial = if let Some(job) = &h.translation {
                 job.source_candidate.clone()
             } else {
@@ -151,7 +158,7 @@ impl WordMateInputController {
                 }) else {
                     let raw = h.engine.composition().typed_text();
                     h.engine.clear();
-                    h.assistant.draft.push(crate::wordmate::DraftWord {
+                    h.assistant.stage_word(crate::wordmate::DraftWord {
                         candidate: qingjian_core::Candidate {
                             text: raw.clone(),
                             kind: qingjian_core::CandidateKind::Generated,
@@ -169,7 +176,7 @@ impl WordMateInputController {
                     let text = h.engine.composition().typed_text();
                     h.engine.clear();
                     if !text.is_empty() {
-                        h.assistant.draft.push(crate::wordmate::DraftWord {
+                        h.assistant.stage_word(crate::wordmate::DraftWord {
                             candidate: qingjian_core::Candidate {
                                 text: text.clone(),
                                 kind: qingjian_core::CandidateKind::Generated,
@@ -184,7 +191,8 @@ impl WordMateInputController {
                     }
                     break;
                 };
-                h.assistant.draft.push(crate::wordmate::DraftWord {
+                chosen.push((candidate.clone(), keys.clone()));
+                h.assistant.stage_word(crate::wordmate::DraftWord {
                     candidate,
                     keys,
                     text,
@@ -194,19 +202,34 @@ impl WordMateInputController {
                 }
             }
             let remaining = h.engine.composition().typed_text();
-            let output = h.assistant.draft_text();
-            let parts: Vec<_> = h
-                .assistant
-                .draft
-                .iter()
-                .filter(|word| !word.keys.is_empty())
-                .map(|word| (word.candidate.clone(), word.keys.clone()))
-                .collect();
+            let full = h.assistant.draft_text();
+            let (output, suffix) = if editor && !remaining.is_empty() && !whole {
+                let position = h.assistant.draft_cursor.unwrap_or(0);
+                (
+                    full.chars().take(position).collect::<String>(),
+                    full.chars().skip(position).collect::<String>(),
+                )
+            } else {
+                (full, String::new())
+            };
+            let parts: Vec<_> = if editor {
+                chosen
+            } else {
+                h.assistant
+                    .draft
+                    .iter()
+                    .filter(|word| !word.keys.is_empty())
+                    .map(|word| (word.candidate.clone(), word.keys.clone()))
+                    .collect()
+            };
             if output.is_empty() {
                 return None;
             }
             h.assistant.draft.clear();
             h.assistant.draft_cursor = None;
+            if editor && !remaining.is_empty() && !whole {
+                h.assistant.set_edited_draft(suffix, 0);
+            }
             Some((output, parts, remaining))
         })
         .flatten();

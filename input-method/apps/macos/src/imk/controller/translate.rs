@@ -33,7 +33,121 @@ impl WordMateInputController {
         if english {
             return self.confirm_source(client);
         }
-        self.adopt_translation(client)
+        let location = client.insertion_range().map(|r| (r.location, r.length));
+        let ready = host::with(|h| {
+            if h.assistant.text.is_some() {
+                return true;
+            }
+            let Some(candidate) = h.session.candidate(h.session.highlighted) else {
+                return false;
+            };
+            let source = h.assistant.composition_text(&candidate.text);
+            let local = if source == candidate.text {
+                candidate
+                    .translation
+                    .as_ref()
+                    .and_then(|t| t.senses().first())
+                    .map(|s| s.text.as_str())
+            } else {
+                None
+            };
+            h.assistant.observe(&source, local, h.assistant.has_draft());
+            if h.assistant.text.is_none() {
+                h.assistant.pending_adoption = Some(h.assistant.generation);
+                h.assistant.pending_location = location;
+            }
+            h.render();
+            h.assistant.text.is_some()
+        })
+        .unwrap_or(false);
+        if ready {
+            self.adopt_translation(client)
+        } else {
+            host::with(|h| {
+                h.status = Some(
+                    "正在请求译文；就绪后自动采用。继续编辑或切换输入框会取消本次采用。".into(),
+                );
+                h.render();
+            });
+            true
+        }
+    }
+
+    /// Called outside the Host borrow by the polling timer.
+    pub(crate) fn poll_adoption() {
+        let pending = host::with(|h| {
+            let generation = h.assistant.pending_adoption?;
+            if generation != h.assistant.generation
+                || (!h.is_composing() && h.translation.is_none())
+            {
+                h.assistant.pending_adoption = None;
+                return None;
+            }
+            h.assistant.text.as_ref()?;
+            let review = h.translation.is_some();
+            let source = if let Some(job) = &h.translation {
+                job.source.clone()
+            } else {
+                h.session
+                    .candidate(h.session.highlighted)
+                    .map(|c| h.assistant.composition_text(&c.text))?
+            };
+            if source != h.assistant.source() {
+                h.assistant.pending_adoption = None;
+                return None;
+            }
+            h.assistant.pending_adoption = None;
+            let location = h.assistant.pending_location.take();
+            let preedit = if let Some(job) = &h.translation {
+                let cursor = h.assistant.composition_cursor(
+                    h.engine
+                        .query()
+                        .ok()
+                        .map(|q| q.marked_cursor())
+                        .unwrap_or(0),
+                );
+                Preedit::plain(&job.expected, cursor)
+            } else {
+                h.session.preedit.clone()
+            };
+            Some((h.active_input.clone()?, preedit, review, location))
+        })
+        .flatten();
+        if let Some(((controller, object), preedit, review, location)) = pending {
+            if secure_input::enabled() {
+                return;
+            }
+            let client = TextClient::new(&object);
+            if let Some((start, length)) = location {
+                if !client
+                    .insertion_range()
+                    .is_some_and(|r| r.location == start && r.length == length)
+                {
+                    return;
+                }
+            }
+            if let Some(preedit) = preedit {
+                if client
+                    .caret_in_marked(&preedit.text())
+                    .is_some_and(|cursor| cursor != preedit.cursor)
+                {
+                    return;
+                }
+                if let Some(range) = client.insertion_range().filter(|r| r.length > 0) {
+                    if client
+                        .read_range(range)
+                        .is_some_and(|text| text != preedit.text())
+                    {
+                        return;
+                    }
+                }
+            }
+            if review {
+                controller.handle_translation_review(49, client);
+            } else {
+                controller.adopt_translation(client);
+            }
+        }
     }
 
     fn adopt_translation(&self, client: TextClient<'_>) -> bool {
@@ -78,25 +192,27 @@ impl WordMateInputController {
         })
         .unwrap_or_else(|| text.clone());
         let (owned, cursor) = host::with(|h| {
-            let draft = h.assistant.draft_text();
-            let query = h.engine.query().ok();
-            if !h.preedit_mode.inline() && draft.is_empty() {
+            if !h.preedit_mode.inline()
+                && !h.assistant.has_draft()
+                && h.assistant.draft_cursor.is_none()
+            {
                 return (String::new(), 0);
             }
-            let cursor = h.assistant.draft_cursor.unwrap_or_else(|| {
-                draft.chars().count()
-                    + query
-                        .as_ref()
-                        .map(|query| query.marked_cursor())
-                        .unwrap_or(0)
-            });
+            if let Some(preedit) = &h.session.preedit {
+                return (preedit.text(), preedit.cursor);
+            }
+            let query = h.engine.query().ok();
+            let token = query
+                .as_ref()
+                .map(|q| q.marked_text())
+                .unwrap_or_else(|| h.engine.composition().typed_text());
+            let cursor = query
+                .as_ref()
+                .map(|q| q.marked_cursor())
+                .unwrap_or_else(|| h.engine.composition().cursor());
             (
-                format!(
-                    "{}{}",
-                    draft,
-                    query.map(|query| query.marked_text()).unwrap_or_default()
-                ),
-                cursor,
+                h.assistant.composition_text(&token),
+                h.assistant.composition_cursor(cursor),
             )
         })
         .unwrap_or_default();
@@ -107,7 +223,7 @@ impl WordMateInputController {
             if !h.engine.composition().is_empty() {
                 let candidate = candidate?;
                 let (text, keys) = h.engine.stage_candidate(&candidate)?;
-                h.assistant.draft.push(crate::wordmate::DraftWord {
+                h.assistant.stage_word(crate::wordmate::DraftWord {
                     candidate,
                     keys,
                     text,
@@ -182,27 +298,26 @@ impl WordMateInputController {
     /// Explicit whole-composition translation; the reference engine supplies the sentence.
     pub(crate) fn translate_composition(&self, client: TextClient<'_>) -> bool {
         let snapshot = host::with(|h| {
-            let draft = h.assistant.draft_text();
             let query = h.engine.query().ok();
-            let expected = format!(
-                "{}{}",
-                draft,
-                query
-                    .as_ref()
-                    .map(|query| query.marked_text())
-                    .unwrap_or_default()
-            );
+            let expected = h
+                .session
+                .preedit
+                .as_ref()
+                .map(|p| p.text())
+                .unwrap_or_else(|| {
+                    h.assistant.composition_text(
+                        &query.as_ref().map(|q| q.marked_text()).unwrap_or_default(),
+                    )
+                });
             let candidate = h
                 .session
                 .candidate(h.session.highlighted)
                 .or_else(|| query.and_then(|query| query.candidates.items.into_iter().next()));
-            let source = format!(
-                "{}{}",
-                draft,
+            let source = h.assistant.composition_text(
                 candidate
                     .as_ref()
-                    .map(|candidate| candidate.text.as_str())
-                    .unwrap_or_default()
+                    .map(|c| c.text.as_str())
+                    .unwrap_or_default(),
             );
             (!source.is_empty()).then_some((source, candidate, expected))
         })
@@ -337,6 +452,13 @@ impl WordMateInputController {
                             h.render();
                         }
                     });
+                } else {
+                    host::with(|h| {
+                        h.assistant.pending_adoption = Some(job.generation);
+                        h.assistant.pending_location = Some((job.range.location, job.range.length));
+                        h.status = Some("译文就绪后自动采用；继续编辑或 Esc 可取消".into());
+                        h.render();
+                    });
                 }
                 true
             }
@@ -407,7 +529,7 @@ impl WordMateInputController {
                     } else {
                         text
                     };
-                    h.assistant.draft.push(crate::wordmate::DraftWord {
+                    h.assistant.stage_word(crate::wordmate::DraftWord {
                         candidate,
                         keys,
                         text: output,

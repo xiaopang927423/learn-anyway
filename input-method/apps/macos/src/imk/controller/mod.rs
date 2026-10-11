@@ -228,6 +228,55 @@ impl WordMateInputController {
                 unsafe { Retained::retain(client.object_ptr().cast_mut()).expect("client") },
             ));
         });
+        let editor = host::with(|h| {
+            ((h.assistant.has_draft() || h.assistant.draft_cursor.is_some())
+                && h.translation.is_none())
+            .then(|| h.session.preedit.as_ref().map(|p| (p.text(), p.cursor)))
+            .flatten()
+        })
+        .flatten();
+        if let Some((owned, expected)) = editor {
+            if let Some(cursor) = client
+                .caret_in_marked(&owned)
+                .filter(|&cursor| cursor != expected)
+            {
+                host::with(|h| {
+                    let draft_len = h.assistant.draft_text().chars().count();
+                    let start = h.assistant.draft_cursor.unwrap_or(draft_len);
+                    let raw = h.engine.composition().typed_text();
+                    let shown_len = owned.chars().count().saturating_sub(draft_len);
+                    if !raw.is_empty() && cursor >= start && cursor <= start + shown_len {
+                        let shown = owned.chars().skip(start).take(cursor - start);
+                        let position = if raw.bytes().all(|c| c.is_ascii_alphabetic()) {
+                            shown.filter(|c| *c != '\'').count()
+                        } else {
+                            cursor - start
+                        }
+                        .min(raw.chars().count());
+                        h.engine.move_cursor_home();
+                        for _ in 0..position {
+                            h.engine.move_cursor_right();
+                        }
+                    } else {
+                        draft::freeze_pending(h);
+                        let added = h
+                            .assistant
+                            .draft_text()
+                            .chars()
+                            .count()
+                            .saturating_sub(draft_len);
+                        let position = if cursor >= start + shown_len {
+                            cursor - shown_len + added
+                        } else {
+                            cursor
+                        };
+                        h.assistant.draft_cursor =
+                            Some(position.min(h.assistant.draft_text().chars().count()));
+                    }
+                    h.assistant.invalidate(false);
+                });
+            }
+        }
         let flags = event.modifierFlags();
         let (command, control, option, shift) = (
             flags.contains(NSEventModifierFlags::Command),

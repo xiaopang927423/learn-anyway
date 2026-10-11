@@ -6,12 +6,32 @@ impl WordMateInputController {
     pub(super) fn handle_text(&self, text: &str, client: TextClient<'_>) -> bool {
         self.note_application(&client);
         if host::with(|h| h.assistant.draft_cursor.is_some()).unwrap_or(false) {
-            host::with(|h| {
-                let mut text_owned = h.assistant.draft_text();
-                let mut cursor = h.assistant.draft_cursor.unwrap_or(0);
-                crate::sentence_edit::insert(&mut text_owned, &mut cursor, text);
-                h.assistant.set_edited_draft(text_owned, cursor);
-            });
+            let letter = text.chars().next().filter(|_| text.chars().count() == 1);
+            if let Some(c) = letter.filter(|c| c.is_ascii_alphabetic() || *c == '\'') {
+                host::with(|h| {
+                    let english = modifiers::caps_lock_on();
+                    h.engine.set_english_mode(english);
+                    h.engine.push(if english && !modifiers::shift_down() {
+                        c.to_ascii_lowercase()
+                    } else {
+                        c
+                    });
+                });
+            } else if let Some(digit) = letter.and_then(|c| c.to_digit(10)).filter(|d| *d > 0)
+                && host::with(|h| !h.engine.composition().is_empty()).unwrap_or(false)
+                && let Some(index) =
+                    host::with(|h| h.session.index_on_page(digit as usize - 1)).flatten()
+            {
+                return self.commit_index(index, client);
+            } else {
+                host::with(|h| {
+                    super::draft::freeze_pending(h);
+                    let mut text_owned = h.assistant.draft_text();
+                    let mut cursor = h.assistant.draft_cursor.unwrap_or(0);
+                    crate::sentence_edit::insert(&mut text_owned, &mut cursor, text);
+                    h.assistant.set_edited_draft(text_owned, cursor);
+                });
+            }
             self.refresh(client);
             return true;
         }
@@ -46,7 +66,7 @@ impl WordMateInputController {
                         aux_code: None,
                     };
                     if let Some((text, keys)) = h.engine.stage_candidate(&candidate) {
-                        h.assistant.draft.push(crate::wordmate::DraftWord {
+                        h.assistant.stage_word(crate::wordmate::DraftWord {
                             candidate,
                             keys,
                             text,
@@ -121,7 +141,7 @@ impl WordMateInputController {
                 let context = format!("{}{}", h.assistant.context, h.assistant.draft_text());
                 if h.sentence_confirmation || h.assistant.has_draft() {
                     let (candidate, keys, text) = h.engine.stage_english_space(&context)?;
-                    h.assistant.draft.push(crate::wordmate::DraftWord {
+                    h.assistant.stage_word(crate::wordmate::DraftWord {
                         candidate,
                         keys,
                         text,

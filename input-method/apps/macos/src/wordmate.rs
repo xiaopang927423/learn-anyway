@@ -180,6 +180,8 @@ pub struct Assistant {
     pub draft: Vec<DraftWord>,
     pub draft_cursor: Option<usize>,
     pub committing: bool,
+    pub pending_adoption: Option<u64>,
+    pub pending_location: Option<(usize, usize)>,
     pub fallback: Option<String>,
     epoch: String,
     source: String,
@@ -264,6 +266,8 @@ impl Assistant {
             draft: Vec::new(),
             draft_cursor: None,
             committing: false,
+            pending_adoption: None,
+            pending_location: None,
             fallback: None,
             epoch: uuid::Uuid::new_v4().to_string(),
             source: String::new(),
@@ -289,6 +293,8 @@ impl Assistant {
         self.text = None;
         self.status.clear();
         self.committing = false;
+        self.pending_adoption = None;
+        self.pending_location = None;
         self.fallback = None;
         if clear_context {
             self.fallback = None;
@@ -358,6 +364,8 @@ impl Assistant {
                     }
                 }
                 Err(code) => {
+                    self.pending_adoption = None;
+                    self.pending_location = None;
                     self.status = if self.text.is_some() {
                         "本地译词；云辅助未就绪"
                     } else if code == "NOT_CONFIGURED" {
@@ -378,6 +386,7 @@ impl Assistant {
         self.draft.iter().map(|word| word.text.as_str()).collect()
     }
     pub fn set_edited_draft(&mut self, text: String, cursor: usize) {
+        let cursor = cursor.min(text.chars().count());
         self.draft.clear();
         if !text.is_empty() {
             self.draft.push(DraftWord {
@@ -394,6 +403,30 @@ impl Assistant {
             });
         }
         self.draft_cursor = Some(cursor);
+    }
+    pub fn composition_text(&self, token: &str) -> String {
+        let mut text = self.draft_text();
+        if let Some(mut cursor) = self.draft_cursor {
+            cursor = cursor.min(text.chars().count());
+            crate::sentence_edit::insert(&mut text, &mut cursor, token);
+        } else {
+            text.push_str(token);
+        }
+        text
+    }
+    pub fn composition_cursor(&self, token_cursor: usize) -> usize {
+        self.draft_cursor
+            .unwrap_or_else(|| self.draft_text().chars().count())
+            + token_cursor
+    }
+    pub fn stage_word(&mut self, word: DraftWord) {
+        if let Some(mut cursor) = self.draft_cursor {
+            let mut text = self.draft_text();
+            crate::sentence_edit::insert(&mut text, &mut cursor, &word.text);
+            self.set_edited_draft(text, cursor);
+        } else {
+            self.draft.push(word);
+        }
     }
     pub fn has_draft(&self) -> bool {
         !self.draft.is_empty()

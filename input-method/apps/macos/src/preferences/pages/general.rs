@@ -160,7 +160,7 @@ impl GeneralPage {
         note(
             layout,
             mtm,
-            "Space 选中文 / 原文，Option+Space 选英文；Tab 将字母和空格保留在黑框草稿。方向键可编辑前文，编辑处仍用 Tab 输入空格；End 回到末尾继续拼音选词。Ctrl+Option+T 翻译整句或应用选区，四项均可自定义。",
+            "Space 选中文 / 原文，Option+Space 选英文；Tab 将字母和空格保留在黑框草稿。前文也可拼音选字或选择英文候选，光标后的文字保留；Tab 输入草稿空格，End 回到末尾。Ctrl+Option+T 翻译整句或应用选区，四项均可自定义。",
         );
         note(
             layout,

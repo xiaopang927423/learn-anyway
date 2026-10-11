@@ -13,6 +13,7 @@ struct State {
     cursor: Cell<usize>,
     selection_length: Cell<usize>,
     inserts: Cell<usize>,
+    bundle: RefCell<String>,
 }
 define_class!(
     #[unsafe(super(NSObject))]
@@ -39,7 +40,7 @@ define_class!(
         #[unsafe(method(length))]
         fn length(&self) -> usize { self.ivars().marked.borrow().encode_utf16().count()+self.ivars().committed.borrow().encode_utf16().count() }
         #[unsafe(method_id(bundleIdentifier))]
-        fn bundle(&self) -> Option<Retained<NSString>> { Some(NSString::from_str("org.wordmate.fixture")) }
+        fn bundle(&self) -> Option<Retained<NSString>> { Some(NSString::from_str(if self.ivars().bundle.borrow().is_empty() { "org.wordmate.fixture".into() } else { self.ivars().bundle.borrow().clone() }.as_str())) }
         #[unsafe(method_id(attributedSubstringFromRange:))]
         fn substring(&self, range: NSRange) -> Option<Retained<NSAttributedString>> {
             let text = if self.ivars().marked.borrow().is_empty() { self.ivars().committed.borrow().clone() } else { self.ivars().marked.borrow().clone() };
@@ -247,12 +248,19 @@ pub(crate) fn run() {
     for c in "really".chars() {
         event(&c.to_string(), 0, none);
     }
+    host::with(|h| {
+        assert_eq!(
+            h.assistant
+                .composition_text(&h.session.candidate(h.session.highlighted).unwrap().text),
+            "I really want to eat 早餐"
+        )
+    });
+    assert_eq!(fixture.ivars().inserts.get(), 0, "editing submitted to app");
+    event("", 124, NSEventModifierFlags::Command);
     assert_eq!(
         &*fixture.ivars().marked.borrow(),
         "I really want to eat 早餐"
     );
-    assert_eq!(fixture.ivars().inserts.get(), 0, "editing submitted to app");
-    event("", 124, NSEventModifierFlags::Command);
     event(
         "t",
         17,
@@ -315,15 +323,231 @@ pub(crate) fn run() {
         17,
         NSEventModifierFlags::Control | NSEventModifierFlags::Option,
     );
+    event(" ", 49, NSEventModifierFlags::Option);
     host::with(|h| {
         let job = h.translation.as_mut().expect("selection preview");
         assert!(!job.composition);
         assert_eq!(job.source, "早餐");
         job.result = Some("breakfast".into());
+        h.assistant.text = Some("breakfast".into());
     });
-    event(" ", 49, NSEventModifierFlags::Option);
+    WordMateInputController::poll_adoption();
     assert_eq!(&*fixture.ivars().committed.borrow(), "breakfast");
     assert_eq!(fixture.ivars().inserts.get(), 2);
+    // The IDE policy disables automatic assistance, not an explicit local-English adoption.
+    *fixture.ivars().bundle.borrow_mut() = "com.jetbrains.intellij".into();
+    host::with(|h| {
+        h.assistant.invalidate(true);
+        h.engine.clear();
+        assert!(h.apps.english_candidates_off("com.jetbrains.intellij"));
+    });
+    let before = fixture.ivars().inserts.get();
+    for c in "yuanxing".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        h.session.highlighted = (0..h.session.layout.len())
+            .find(|&i| h.session.candidate(i).is_some_and(|c| c.text == "圆形"))
+            .expect("circle candidate")
+    });
+    controller.render(client);
+    host::with(|h| {
+        assert!(
+            h.assistant.text.is_none(),
+            "IDE should suppress automatic preview"
+        )
+    });
+    event(" ", 49, NSEventModifierFlags::Option);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "circle");
+    assert_eq!(fixture.ivars().inserts.get(), before + 1);
+
+    // A single explicit English key may wait, then adopt exactly once without a second key.
+    host::with(|h| {
+        h.assistant.invalidate(true);
+        h.engine.set_input("ceshici");
+        h.session.reset(
+            Preedit::plain("ce'shi'ci", 9),
+            vec![Candidate {
+                text: "测试词".into(),
+                kind: qingjian_core::CandidateKind::Generated,
+                syllables: vec![],
+                reading: None,
+                translation: None,
+                aux_code: None,
+            }],
+            h.page_size,
+            0,
+        );
+    });
+    client.set_marked_text("ce'shi'ci", 9);
+    let before = fixture.ivars().inserts.get();
+    event(" ", 49, NSEventModifierFlags::Option);
+    host::with(|h| {
+        assert_eq!(h.assistant.pending_adoption, Some(h.assistant.generation));
+        h.assistant.text = Some("TestWord".into());
+    });
+    WordMateInputController::poll_adoption();
+    assert_eq!(&*fixture.ivars().committed.borrow(), "TestWord");
+    assert_eq!(fixture.ivars().inserts.get(), before + 1);
+    WordMateInputController::poll_adoption();
+    assert_eq!(fixture.ivars().inserts.get(), before + 1);
+
+    host::with(|h| {
+        h.assistant.invalidate(true);
+        h.engine.set_input("ceshici");
+        h.session.reset(
+            Preedit::plain("ce'shi'ci", 9),
+            vec![Candidate {
+                text: "测试词".into(),
+                kind: qingjian_core::CandidateKind::Generated,
+                syllables: vec![],
+                reading: None,
+                translation: None,
+                aux_code: None,
+            }],
+            h.page_size,
+            0,
+        );
+    });
+    client.set_marked_text("ce'shi'ci", 9);
+    let before = fixture.ivars().inserts.get();
+    event(" ", 49, NSEventModifierFlags::Option);
+    event("e", 0, none);
+    host::with(|h| {
+        assert!(h.assistant.pending_adoption.is_none());
+        h.assistant.text = Some("StaleResult".into());
+    });
+    WordMateInputController::poll_adoption();
+    assert_eq!(
+        fixture.ivars().inserts.get(),
+        before,
+        "continued editing must cancel automatic adoption"
+    );
+    event("", 53, none);
+
+    *fixture.ivars().bundle.borrow_mut() = String::new();
+    host::with(|h| {
+        h.engine.clear();
+        h.assistant.invalidate(true);
+        h.assistant.set_edited_draft("娃问题".into(), 0);
+    });
+    controller.refresh(client);
+    let before = fixture.ivars().inserts.get();
+    for c in "xianzaicunzai".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        assert_eq!(h.engine.composition().typed_text(), "xianzaicunzai");
+        assert_eq!(h.assistant.draft_text(), "娃问题");
+    });
+    let now = host::with(|h| {
+        (0..h.session.layout.len())
+            .find(|&i| h.session.candidate(i).is_some_and(|c| c.text == "现在"))
+    })
+    .flatten()
+    .expect("pinyin candidate in the middle");
+    controller.choose_candidate(now, client, false);
+    host::with(|h| assert_eq!(h.engine.composition().typed_text(), "cunzai"));
+    let exists = host::with(|h| {
+        (0..h.session.layout.len())
+            .find(|&i| h.session.candidate(i).is_some_and(|c| c.text == "存在"))
+    })
+    .flatten()
+    .expect("remaining pinyin before preserved suffix");
+    controller.choose_candidate(exists, client, false);
+    assert_eq!(&*fixture.ivars().marked.borrow(), "现在存在娃问题");
+    event("", 117, none);
+    assert_eq!(&*fixture.ivars().marked.borrow(), "现在存在问题");
+    assert_eq!(fixture.ivars().inserts.get(), before);
+    for c in "bug".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        h.session.highlighted = (0..h.session.layout.len())
+            .find(|&i| {
+                h.session.candidate(i).is_some_and(|c| {
+                    c.kind == qingjian_core::CandidateKind::English && c.text == "bug"
+                })
+            })
+            .unwrap()
+    });
+    event(" ", 49, NSEventModifierFlags::Option);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "现在存在bug问题");
+    assert_eq!(fixture.ivars().inserts.get(), before + 1);
+
+    // Mouse caret changes are respected on the next key, including Chinese insertion at the front.
+    host::with(|h| {
+        h.assistant.invalidate(true);
+        h.assistant.set_edited_draft("存在问题".into(), 2);
+    });
+    controller.refresh(client);
+    fixture.ivars().cursor.set(0);
+    for c in "xianzai".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        h.session.highlighted = (0..h.session.layout.len())
+            .find(|&i| h.session.candidate(i).is_some_and(|c| c.text == "现在"))
+            .unwrap()
+    });
+    event(" ", 49, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "现在存在问题");
+
+    // Canceling new pinyin must keep the frozen words, not drop the suffix.
+    host::with(|h| {
+        h.assistant.invalidate(true);
+        h.assistant.set_edited_draft("😀后文".into(), 1);
+    });
+    controller.refresh(client);
+    for c in "xianzai".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    event("", 53, none);
+    assert_eq!(&*fixture.ivars().marked.borrow(), "😀后文");
+    host::with(|h| {
+        h.engine.clear();
+        h.assistant.draft.clear();
+        h.assistant.draft_cursor = None;
+        h.assistant.invalidate(true);
+    });
+    controller.refresh(client);
+
+    // Confirming only part of a middle token keeps both unselected pinyin and the suffix.
+    host::with(|h| {
+        h.assistant.invalidate(true);
+        h.assistant.set_edited_draft("后文".into(), 0);
+    });
+    controller.refresh(client);
+    for c in "nihaoma".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        h.session.highlighted = (0..h.session.layout.len())
+            .find(|&i| {
+                h.session.candidate(i).is_some_and(|c| {
+                    c.text == "你" && c.kind == qingjian_core::CandidateKind::Chinese
+                })
+            })
+            .unwrap()
+    });
+    event(" ", 49, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "你");
+    assert!(fixture.ivars().marked.borrow().ends_with("后文"));
+    host::with(|h| {
+        assert_eq!(h.engine.composition().typed_text(), "haoma");
+        assert_eq!(h.assistant.draft_text(), "后文");
+        assert_eq!(h.assistant.draft_cursor, Some(0));
+    });
+    event("", 53, none);
+    assert_eq!(&*fixture.ivars().marked.borrow(), "后文");
+    host::with(|h| {
+        h.engine.clear();
+        h.assistant.draft.clear();
+        h.assistant.draft_cursor = None;
+        h.assistant.invalidate(true);
+    });
+    controller.refresh(client);
+
     // Wait for the asynchronous durable outbox, using only this fixture's isolated backend.
     let outbox =
         std::path::PathBuf::from(std::env::var_os("WM_USER_DATA").unwrap()).join("ime-outbox");
@@ -360,6 +584,6 @@ pub(crate) fn run() {
         h.active_input = None;
     });
     println!(
-        "IME_INTERACTION_OK dispatch Tab, mixed composition, original selection, caret editing, Option-Space adoption; one app insertion per adoption, highlighted candidate, selected-text adoption, Enter guard, confirmed fragment/selection learning, one-Space adoption, mixed-English source, candidate-window recovery"
+        "IME_INTERACTION_OK dispatch Tab, mixed composition, original selection, caret editing, Option-Space adoption; one app insertion per adoption, highlighted candidate, selected-text adoption, Enter guard, confirmed fragment/selection learning, one-Space adoption, mixed-English source, candidate-window recovery, middle pinyin+suffix editing, IDE local gloss, queued single-key adoption/cancellation"
     );
 }

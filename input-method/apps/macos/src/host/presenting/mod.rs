@@ -108,11 +108,10 @@ impl Host {
             crate::candidate_fallback::ensure(&mut candidates, &raw, &draft);
             crate::candidate_fallback::ensure_literal(&mut candidates, &raw);
             if !candidates.is_empty() {
-                let text = format!("{draft}{raw}");
+                let text = self.assistant.composition_text(&raw);
                 let cursor = self
                     .assistant
-                    .draft_cursor
-                    .unwrap_or_else(|| text.chars().count());
+                    .composition_cursor(self.engine.composition().cursor());
                 self.reset_session(Preedit::plain(&text, cursor), candidates);
             }
         }
@@ -150,13 +149,13 @@ impl Host {
                 row.index = index;
                 row.cloud = candidate.kind == CandidateKind::Cloud;
                 if self.translation.is_none() {
-                    row.text = format!("{}{}", self.assistant.draft_text(), row.text);
+                    row.text = self.assistant.composition_text(&row.text);
                 }
                 if first + i == self.session.highlighted
                     && (if self.translation.is_some() {
                         candidate.text.clone()
                     } else {
-                        format!("{}{}", self.assistant.draft_text(), candidate.text)
+                        self.assistant.composition_text(&candidate.text)
                     }) == self.assistant.source()
                 {
                     row.assistant_translation = Some(

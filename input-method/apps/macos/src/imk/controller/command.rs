@@ -24,6 +24,21 @@ impl WordMateInputController {
             host::with(|h| h.assistant.invalidate(true));
             return false;
         }
+        if (selector == sel!(cancelOperation:) || selector == sel!(complete:))
+            && host::with(|h| h.assistant.draft_cursor.is_some()).unwrap_or(false)
+        {
+            host::with(|h| {
+                if h.engine.composition().is_empty() {
+                    h.assistant.draft_cursor = None;
+                } else {
+                    h.engine.clear();
+                }
+                h.assistant.invalidate(false);
+                h.cancel_prediction();
+            });
+            self.refresh(client);
+            return true;
+        }
         if self.edit_draft_command(selector, client) {
             return true;
         }

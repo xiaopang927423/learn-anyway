@@ -48,6 +48,27 @@ impl<'a> TextClient<'a> {
             unsafe { msg_send![self.object, attributedSubstringFromRange: range] };
         value.map(|v| v.string().to_string())
     }
+    /// Sync a host mouse caret only within this exact marked composition.
+    pub fn caret_in_marked(&self, owned: &str) -> Option<usize> {
+        let marked: NSRange = unsafe { msg_send![self.object, markedRange] };
+        let selected: NSRange = unsafe { msg_send![self.object, selectedRange] };
+        if marked.location == NSNotFound as usize
+            || selected.length != 0
+            || marked.length != owned.encode_utf16().count()
+        {
+            return None;
+        }
+        let offset = selected.location.checked_sub(marked.location)?;
+        let mut units = 0;
+        for (count, c) in owned.chars().enumerate() {
+            if units == offset {
+                return Some(count);
+            }
+            units += c.len_utf16();
+        }
+        (units == offset).then_some(owned.chars().count())
+    }
+
     pub fn insertion_range(&self) -> Option<NSRange> {
         let marked: NSRange = unsafe { msg_send![self.object, markedRange] };
         let selected: NSRange = unsafe { msg_send![self.object, selectedRange] };
