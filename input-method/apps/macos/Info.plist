@@ -19,7 +19,7 @@
 	<key>CFBundleIconFile</key>
 	<string>WordMateInput</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.5.0-dev</string>
+	<string>0.6.0-dev</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>

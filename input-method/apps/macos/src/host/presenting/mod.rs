@@ -191,6 +191,11 @@ impl Host {
                 translated.label(),
                 original.label()
             ))
+        } else if self.engine.english_mode() {
+            Some(format!(
+                "英文 · Space 空格 · Tab 补全 · {} 中英切换",
+                self.settings.config().shortcut.toggle_english_key().label()
+            ))
         } else {
             Some(format!(
                 "{} 上屏 · {} 英文 · {} 草稿空格{}",

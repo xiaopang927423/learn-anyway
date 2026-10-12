@@ -27,6 +27,8 @@ pub struct ShortcutConfig {
     pub confirm_original: KeyCombo,
     pub confirm_translation: KeyCombo,
     pub insert_space: KeyCombo,
+    /// macOS 中英键盘切换，和中文确认快捷键独立。
+    pub toggle_english: KeyCombo,
 
     /// 数字键配这些修饰键：删掉候选（用户词整个删掉，词库词清掉对它的学习）。
     pub delete_candidate: Modifiers,
@@ -57,6 +59,10 @@ impl Default for ShortcutConfig {
                 modifiers: Modifiers::default(),
                 key: '\t',
             },
+            toggle_english: KeyCombo {
+                modifiers: Modifiers::SHIFT_CONTROL,
+                key: 'e',
+            },
             delete_candidate: Modifiers::SHIFT,
         }
     }
@@ -69,6 +75,7 @@ impl ShortcutConfig {
             self.confirm_translation,
             self.insert_space,
             self.translate_selection,
+            self.toggle_english,
         ];
         let desktop_lookup = KeyCombo {
             modifiers: Modifiers::SHIFT_OPTION,
@@ -78,9 +85,17 @@ impl ShortcutConfig {
             modifiers: Modifiers::OPTION,
             key: 'd',
         };
-        !keys.contains(&desktop_lookup)
+        !self.toggle_english.modifiers.is_empty()
+            && !keys.contains(&desktop_lookup)
             && !keys.contains(&desktop_selection)
             && (0..keys.len()).all(|i| (i + 1..keys.len()).all(|j| keys[i] != keys[j]))
+    }
+    pub fn toggle_english_key(&self) -> KeyCombo {
+        if self.valid_input_keys() {
+            self.toggle_english
+        } else {
+            Self::default().toggle_english
+        }
     }
     pub fn input_keys(&self) -> (KeyCombo, KeyCombo, KeyCombo) {
         let c = if self.valid_input_keys() {
@@ -129,6 +144,13 @@ mod tests {
         assert_eq!(original.key_string(), "space");
         assert_eq!(translated.key_string(), "option+space");
         assert_eq!(space.key_string(), "tab");
+        assert_eq!(c.toggle_english_key().key_string(), "control+shift+e");
+        let conflict_mode: ShortcutConfig = toml::from_str("toggle_english = 'space'").unwrap();
+        assert!(!conflict_mode.valid_input_keys());
+        assert_eq!(conflict_mode.toggle_english_key(), c.toggle_english_key());
+        let custom_mode: ShortcutConfig = toml::from_str("toggle_english = 'control+j'").unwrap();
+        assert!(custom_mode.valid_input_keys());
+        assert_eq!(custom_mode.toggle_english_key().key_string(), "control+j");
         let custom: ShortcutConfig = toml::from_str("confirm_original = 'control+j'\nconfirm_translation = 'option+e'\ninsert_space = 'shift+space'\n").unwrap();
         assert_eq!(custom.input_keys().2.key_string(), "shift+space");
         let restored: ShortcutConfig = toml::from_str(&toml::to_string(&custom).unwrap()).unwrap();

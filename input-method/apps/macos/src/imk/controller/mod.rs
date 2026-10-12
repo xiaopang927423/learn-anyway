@@ -21,6 +21,7 @@ mod command;
 mod commit;
 mod display;
 mod draft;
+mod english;
 pub(crate) mod interaction_smoke;
 mod text;
 mod translate;
@@ -308,6 +309,39 @@ impl WordMateInputController {
         let matches = |combo: qingjian_platform::KeyCombo| {
             pressed == combo.modifiers && key_char == Some(combo.key)
         };
+        let toggle = host::with(|h| h.settings.config().shortcut.toggle_english_key())
+            .unwrap_or_else(|| qingjian_platform::ShortcutConfig::default().toggle_english_key());
+        if matches(toggle) {
+            if host::with(|h| h.is_composing()).unwrap_or(false) {
+                self.commit_raw(client);
+            }
+            host::with(|h| {
+                h.end_translation();
+                h.assistant.invalidate(true);
+                h.cancel_prediction();
+            });
+            modifiers::set_english_mode(!modifiers::english_mode());
+            host::with(|h| h.indicator.update());
+            return true;
+        }
+        // English boundaries and Tab completion must precede Chinese adoption bindings.
+        let translate = host::with(|h| h.translate_keys).unwrap_or_default();
+        if !modifiers::english_mode()
+            && host::with(|h| h.engine.english_mode()).unwrap_or(false)
+            && !host::with(|h| h.translation.is_some()).unwrap_or(false)
+        {
+            if host::with(|h| h.is_composing()).unwrap_or(false) {
+                self.commit_raw(client);
+            }
+            host::with(|h| h.engine.set_english_mode(false));
+        }
+        if modifiers::english_mode()
+            && !host::with(|h| h.translation.is_some()).unwrap_or(false)
+            && !(matches(translate) && !translate.modifiers.is_empty())
+            && !(matches(translated) && !translated.modifiers.is_empty())
+        {
+            return self.handle_english_event(event, client);
+        }
         if matches(translated) {
             if host::with(|h| h.translation.is_some()).unwrap_or(false) {
                 return self.handle_translation_review(49, client);

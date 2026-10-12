@@ -138,7 +138,7 @@ impl GeneralPage {
         row_checkbox(layout, &traditional);
         let english = checkbox(
             mtm,
-            "英文模式（Caps Lock）也给候选",
+            "英文键盘显示单词补全",
             Setting::EnglishCandidates,
             target,
         );

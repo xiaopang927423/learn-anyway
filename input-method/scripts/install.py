@@ -10,7 +10,7 @@ if not bundle.is_dir():raise SystemExit('Run scripts/build.py first')
 if pathlib.Path('/Library/Input Methods/WordMateInput.app').exists():
     raise SystemExit('A system-wide WordMate input method exists; resolve its installation location before using this per-user installer')
 subprocess.run(['python3',str(ROOT/'scripts/package.py')],check=True)
-package=ROOT/'dist/WordMateInput-0.5.0-dev-local.pkg'
+package=ROOT/'dist/WordMateInput-0.6.0-dev-local.pkg'
 subprocess.run(['/usr/sbin/installer','-pkg',str(package),'-target','CurrentUserHomeDirectory'],check=True)
 destination=pathlib.Path.home()/'Library/Input Methods/WordMateInput.app'
 exe=destination/'Contents/MacOS/WordMateInput'

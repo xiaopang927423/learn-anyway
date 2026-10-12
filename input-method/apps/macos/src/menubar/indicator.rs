@@ -136,7 +136,7 @@ impl ModeIndicator {
         if !self.shown {
             return;
         }
-        let english = modifiers::caps_lock_on();
+        let english = modifiers::english_mode();
         if self.english == Some(english) {
             return;
         }

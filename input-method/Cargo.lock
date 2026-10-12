@@ -2632,7 +2632,7 @@ dependencies = [
 
 [[package]]
 name = "qingjian-macos"
-version = "0.5.0-dev"
+version = "0.6.0-dev"
 dependencies = [
  "dotenvy",
  "jiff",

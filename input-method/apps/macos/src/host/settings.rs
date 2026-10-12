@@ -303,7 +303,8 @@ impl Host {
                 setting @ (Setting::TranslateSelectionKeys
                 | Setting::ConfirmOriginalKeys
                 | Setting::ConfirmTranslationKeys
-                | Setting::InsertSpaceKeys),
+                | Setting::InsertSpaceKeys
+                | Setting::ToggleEnglishKeys),
                 SettingValue::Text(text),
             ) => {
                 if let Ok(combo) = text.parse::<KeyCombo>() {
@@ -316,6 +317,10 @@ impl Host {
                         Setting::ConfirmTranslationKeys => {
                             c.confirm_translation = combo;
                             "confirm_translation"
+                        }
+                        Setting::ToggleEnglishKeys => {
+                            c.toggle_english = combo;
+                            "toggle_english"
                         }
                         Setting::InsertSpaceKeys => {
                             c.insert_space = combo;
@@ -342,6 +347,7 @@ impl Host {
                     ("confirm_original", defaults.confirm_original),
                     ("confirm_translation", defaults.confirm_translation),
                     ("insert_space", defaults.insert_space),
+                    ("toggle_english", defaults.toggle_english),
                 ] {
                     self.settings.set_value("shortcut", key, combo.key_string());
                 }

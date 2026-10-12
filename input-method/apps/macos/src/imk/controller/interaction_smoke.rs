@@ -10,6 +10,7 @@ use std::cell::{Cell, RefCell};
 struct State {
     marked: RefCell<String>,
     committed: RefCell<String>,
+    writes: RefCell<Vec<String>>,
     cursor: Cell<usize>,
     selection_length: Cell<usize>,
     inserts: Cell<usize>,
@@ -27,6 +28,7 @@ define_class!(
         #[unsafe(method(insertText:replacementRange:))]
         fn insert(&self, text: &NSString, _replacement: NSRange) {
             *self.ivars().committed.borrow_mut() = text.to_string();
+            self.ivars().writes.borrow_mut().push(text.to_string());
             self.ivars().marked.borrow_mut().clear();
             self.ivars().cursor.set(text.length()); self.ivars().selection_length.set(0); self.ivars().inserts.set(self.ivars().inserts.get()+1);
         }
@@ -579,11 +581,149 @@ pub(crate) fn run() {
         persisted(),
         "confirmed fragment/selection learning was not persisted"
     );
+    // v0.6.0 English mode: test real dispatch, never bypass the Chinese binding priority.
+    host::with(|h| {
+        h.engine.clear();
+        h.assistant.draft.clear();
+        h.assistant.draft_cursor = None;
+        h.end_translation();
+    });
+    *fixture.ivars().bundle.borrow_mut() = "com.apple.TextEdit".into();
+    modifiers::set_english_mode(false);
+    let toggle_flags = NSEventModifierFlags::Control | NSEventModifierFlags::Shift;
+    event("E", 14, toggle_flags);
+    assert!(modifiers::english_mode());
+    fixture.ivars().writes.borrow_mut().clear();
+    for c in "I".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    event(" ", 49, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "I ");
+    // Each word boundary is exactly one host write.
+    for word in [
+        "want",
+        "to",
+        "eat",
+        "breakfast",
+        "Diffu",
+        "v2",
+        "don't",
+        "well-known",
+    ] {
+        for c in word.chars() {
+            event(&c.to_string(), 0, none);
+        }
+        host::with(|h| {
+            assert_eq!(h.engine.composition().typed_text(), word);
+            assert!(h.engine.english_mode());
+            assert!(!h.assistant.has_draft());
+        });
+        let inserts = fixture.ivars().inserts.get();
+        event(" ", 49, none);
+        assert_eq!(
+            fixture.ivars().inserts.get(),
+            inserts + 1,
+            "one Space commits word and space, no extra key"
+        );
+        assert_eq!(&*fixture.ivars().committed.borrow(), &format!("{word} "));
+        assert!(fixture.ivars().marked.borrow().is_empty());
+    }
+    assert_eq!(
+        fixture.ivars().writes.borrow().concat(),
+        "I want to eat breakfast Diffu v2 don't well-known "
+    );
+    event(" ", 49, none);
+    event(" ", 49, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), " ");
+    for c in "bre".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        h.session.highlighted = (0..h.session.layout.len())
+            .find(|&i| {
+                h.session
+                    .candidate(i)
+                    .is_some_and(|c| c.text == "breakfast")
+            })
+            .expect("English completion breakfast");
+    });
+    event("\t", 48, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "breakfast");
+    for c in "bre".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        h.session.highlighted = (0..h.session.layout.len())
+            .find(|&i| {
+                h.session
+                    .candidate(i)
+                    .is_some_and(|c| c.text == "breakfast")
+            })
+            .unwrap();
+    });
+    event(" ", 49, none);
+    assert_eq!(
+        &*fixture.ivars().committed.borrow(),
+        "bre ",
+        "Space must not silently take a completion"
+    );
+    for c in "foo123".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| assert_eq!(h.engine.composition().typed_text(), "foo123"));
+    event("\r", 36, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "foo123");
+    let returned = |characters: &str, code: u16, flags: NSEventModifierFlags| {
+        let string = NSString::from_str(characters);
+        let e = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+            NSEventType::KeyDown, NSPoint::ZERO, flags, 0., 0, None, &string, &string, false, code).unwrap();
+        controller.dispatch_event(&e, client)
+    };
+    assert!(
+        !returned("\r", 36, none),
+        "empty English Return is host action"
+    );
+    for c in "hello".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    assert!(!returned(".", 47, none));
+    assert_eq!(&*fixture.ivars().committed.borrow(), "hello");
+    for c in "ABC".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    assert!(
+        !returned("", 123, none),
+        "left arrow returns to the host for editing earlier words"
+    );
+    assert_eq!(&*fixture.ivars().committed.borrow(), "ABC");
+    assert!(
+        !returned("\t", 48, none),
+        "empty Tab must keep host focus navigation"
+    );
+    event("E", 14, toggle_flags);
+    assert!(!modifiers::english_mode());
+    for c in "nihao".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    event(" ", 49, none);
+    assert_eq!(
+        &*fixture.ivars().committed.borrow(),
+        "你好",
+        "Chinese once-Space still works"
+    );
+    event("E", 14, toggle_flags);
+    *fixture.ivars().bundle.borrow_mut() = "com.jetbrains.intellij".into();
+    assert!(
+        !returned("i", 34, none),
+        "IDE English stays direct passthrough"
+    );
+    host::with(|h| assert!(h.engine.composition().is_empty()));
+    modifiers::set_english_mode(false);
     host::with(|h| {
         h.window.hide();
         h.active_input = None;
     });
     println!(
-        "IME_INTERACTION_OK dispatch Tab, mixed composition, original selection, caret editing, Option-Space adoption; one app insertion per adoption, highlighted candidate, selected-text adoption, Enter guard, confirmed fragment/selection learning, one-Space adoption, mixed-English source, candidate-window recovery, middle pinyin+suffix editing, IDE local gloss, queued single-key adoption/cancellation"
+        "IME_INTERACTION_OK dispatch Tab, mixed composition, original selection, caret editing, Option-Space adoption; one app insertion per adoption, highlighted candidate, selected-text adoption, Enter guard, confirmed fragment/selection learning, one-Space adoption, mixed-English source, candidate-window recovery, middle pinyin+suffix editing, IDE local gloss, queued single-key adoption/cancellation; English keyboard Space, Tab completion, case, digits, navigation, mode switching and IDE passthrough"
     );
 }

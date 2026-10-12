@@ -42,6 +42,7 @@ pub struct ShortcutsPage {
     confirm_original: Retained<KeyRecorder>,
     confirm_translation: Retained<KeyRecorder>,
     insert_space: Retained<KeyRecorder>,
+    toggle_english: Retained<KeyRecorder>,
 }
 
 impl ShortcutsPage {
@@ -98,6 +99,19 @@ impl ShortcutsPage {
             "勾上后 ? 先进问字（中英文模式都行），后面跟字母才是问题，跟空格、回车等其他键时还原成问号；不勾问号就是问号。",
         );
         layout.space(GROUP_GAP);
+        let toggle_english = row_recorder(
+            layout,
+            mtm,
+            "中英键盘切换",
+            Setting::ToggleEnglishKeys,
+            false,
+            target,
+        );
+        note(
+            layout,
+            mtm,
+            "英文键盘：Space 原词加空格；Tab 采用补全；数字、标点直接输入。默认 Ctrl+Shift+E 切换，也可使用 Caps Lock。切换先保留正在输入的原文。中文模式仍是 Space 上屏、Tab 草稿空格。",
+        );
         let confirm_original = row_recorder(
             layout,
             mtm,
@@ -205,10 +219,14 @@ impl ShortcutsPage {
             confirm_original,
             confirm_translation,
             insert_space,
+            toggle_english,
         }
     }
 
     pub fn sync(&self, config: &Config) {
+        let toggle = config.shortcut.toggle_english_key();
+        self.toggle_english
+            .show(&toggle.key_string(), &toggle.label());
         let (original, translation, space) = config.shortcut.input_keys();
         self.confirm_original
             .show(&original.key_string(), &original.label());

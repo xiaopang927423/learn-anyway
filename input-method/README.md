@@ -1,6 +1,6 @@
 # WordMate 输入法开发组件
 
-v0.5.0 本地开发版，macOS arm64。Rust 基础引擎和原生壳来自 Qingjian c08ae57；来源、GPL-3.0-or-later 和资源声明见 [NOTICE](NOTICE.md)、[资源来源](UPSTREAM-DATA-SOURCES.md)。桌面端原有 MIT 声明不覆盖本组件。
+v0.6.0 实验性本地开发版（仍有已知 bug），macOS arm64。Rust 基础引擎和原生壳来自 Qingjian c08ae57；来源、GPL-3.0-or-later 和资源声明见 [NOTICE](NOTICE.md)、[资源来源](UPSTREAM-DATA-SOURCES.md)。桌面端原有 MIT 声明不覆盖本组件。
 
 ## 构建、打包和安装
 
@@ -14,7 +14,7 @@ python3 input-method/scripts/install.py
 
 资源经 resource-manifest.json 验证。`--release` 只选择优化构建；不代表发布验收通过。资源和构建产物不进入 Git。
 
-安装包：`input-method/dist/WordMateInput-0.5.0-dev-local.pkg`。使用 macOS Installer 的 CurrentUserHomeDirectory 域，安装至 `~/Library/Input Methods/WordMateInput.app`，不复制至系统目录。替换前停止确切旧进程并备份至 `~/Library/Application Support/WordMateInput/install-backups/`；学习数据位于应用支持目录。
+安装包：`input-method/dist/WordMateInput-0.6.0-dev-local.pkg`。使用 macOS Installer 的 CurrentUserHomeDirectory 域，安装至 `~/Library/Input Methods/WordMateInput.app`，不复制至系统目录。替换前停止确切旧进程并备份至 `~/Library/Application Support/WordMateInput/install-backups/`；学习数据位于应用支持目录。
 
 安装文件与输入源启用是两个状态。安装后检查：
 
@@ -41,3 +41,9 @@ python3 input-method/scripts/install.py
 控制器回归：在隔离目录运行 `WM_IME_DATA=/tmp/wm-ime-test WM_USER_DATA=/tmp/wm-bridge-test bundle/WordMateInput.app/Contents/MacOS/WordMateInput --interaction-smoke`。使用 NSEvent 和模拟 IMK 文本客户端验证实际分发，不依赖真实模型，不代表所有宿主应用已验收。
 
 2026-10-10：修正 Space 先暂存导致需按两次的问题；短候选保留未选拼音；补可选原文与空会话恢复。通用页可开关自动记忆，常用词条页可手工新增/纠正，个人词库保存后参与候选。
+
+## 0.6.0 英文键盘
+
+Ctrl+Shift+E 切换中英文，也可使用 Caps Lock；快捷键在输入法「快捷键」页自定义。英文模式按 Space 一次输入原词和空格；候选用上下键选择，Tab 采用所选补全。数字、标点保持原样；无候选时仍能输入原词。左右键把当前词保留后交给应用，方便编辑前文。无待输入单词时 Tab 是宿主焦点导航；有待输入词时 Enter 仅确认原词，下一次 Enter 才交给宿主。英文键盘不自动调用模型，整句翻译通过 Ctrl+Option+T 主动触发。IDE/终端默认英文直通、不显示候选，可在常规设置更改。中文模式保持原有 Space/Option+Space/Tab 的行为。
+
+参见 [0.6.0 PRD](../docs/产品需求目录/PRD-v0.6.0-英文键盘.md) 和 [验收记录](../docs/测试目录/v0.6.0-英文键盘回归.md)。

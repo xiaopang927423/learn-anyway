@@ -5,6 +5,9 @@ use super::*;
 impl WordMateInputController {
     pub(super) fn handle_text(&self, text: &str, client: TextClient<'_>) -> bool {
         self.note_application(&client);
+        if modifiers::english_mode() {
+            return self.handle_english_text(text, client);
+        }
         if host::with(|h| h.assistant.draft_cursor.is_some()).unwrap_or(false) {
             let letter = text.chars().next().filter(|_| text.chars().count() == 1);
             if let Some(c) = letter.filter(|c| c.is_ascii_alphabetic() || *c == '\'') {

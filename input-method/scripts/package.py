@@ -18,18 +18,18 @@ with tempfile.TemporaryDirectory(prefix='wm-ime-package-') as directory:
         item['BundleHasStrictIdentifier']=True;item['BundleOverwriteAction']='upgrade'
     components.write_bytes(plistlib.dumps(values))
     identifier='com.qiji.wordmate.inputmethod.local'
-    subprocess.run(['pkgbuild','--root',str(payload),'--component-plist',str(components),'--scripts',str(ROOT/'scripts/pkg'),'--identifier',identifier,'--version','0.5.0','--install-location','/',str(work/'input-method.pkg')],check=True)
+    subprocess.run(['pkgbuild','--root',str(payload),'--component-plist',str(components),'--scripts',str(ROOT/'scripts/pkg'),'--identifier',identifier,'--version','0.6.0','--install-location','/',str(work/'input-method.pkg')],check=True)
     distribution=work/'Distribution.xml'
     distribution.write_text('''<?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
-<title>WordMate 0.5.0 输入法 · 本地开发版</title>
+<title>WordMate 0.6.0 输入法 · 本地开发版</title>
 <options customize="never" require-scripts="true" hostArchitectures="arm64"/>
 <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
 <choices-outline><line choice="ime"/></choices-outline>
 <choice id="ime" title="WordMate 输入法"><pkg-ref id="com.qiji.wordmate.inputmethod.local"/></choice>
-<pkg-ref id="com.qiji.wordmate.inputmethod.local" version="0.5.0" auth="none" onConclusion="None">input-method.pkg</pkg-ref>
+<pkg-ref id="com.qiji.wordmate.inputmethod.local" version="0.6.0" auth="none" onConclusion="None">input-method.pkg</pkg-ref>
 </installer-gui-script>
 ''')
-    package=output/'WordMateInput-0.5.0-dev-local.pkg'
+    package=output/'WordMateInput-0.6.0-dev-local.pkg'
     subprocess.run(['productbuild','--distribution',str(distribution),'--package-path',str(work),str(package)],check=True)
 print('IME_PACKAGE_OK '+str(package))

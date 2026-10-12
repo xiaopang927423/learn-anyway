@@ -12,3 +12,25 @@ pub fn caps_lock_on() -> bool {
 pub fn shift_down() -> bool {
     NSEvent::modifierFlags_class().contains(NSEventModifierFlags::Shift)
 }
+
+thread_local! {
+    static ENGLISH_OVERRIDE: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+    static LAST_CAPS: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+/// Caps Lock changes override a previous software selection; menu polling also sees the change.
+pub fn english_mode() -> bool {
+    let caps = caps_lock_on();
+    LAST_CAPS.with(|last| {
+        if last
+            .replace(Some(caps))
+            .is_some_and(|previous| previous != caps)
+        {
+            ENGLISH_OVERRIDE.with(|mode| mode.set(None));
+        }
+    });
+    ENGLISH_OVERRIDE.with(|mode| mode.get().unwrap_or(caps))
+}
+pub fn set_english_mode(english: bool) {
+    LAST_CAPS.with(|last| last.set(Some(caps_lock_on())));
+    ENGLISH_OVERRIDE.with(|mode| mode.set(Some(english)));
+}

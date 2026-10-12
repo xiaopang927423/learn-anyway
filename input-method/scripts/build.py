@@ -44,8 +44,8 @@ for name in ['LICENSE', 'NOTICE.md', 'UPSTREAM-DATA-SOURCES.md', 'resource-manif
 shutil.copy2(ROOT / ('target/release' if args.release else 'target/debug') / 'qingjian-macos', contents / 'MacOS/WordMateInput')
 info = plistlib.loads((ROOT / 'apps/macos/Info.plist').read_bytes())
 info['CFBundleExecutable'] = 'WordMateInput'
-info['CFBundleShortVersionString'] = '0.5.0'
-info['CFBundleVersion'] = '5001'
+info['CFBundleShortVersionString'] = '0.6.0'
+info['CFBundleVersion'] = '6001'
 info['WMDevelopmentBuild'] = True
 info['CFBundleIconFile'] = 'WordMateInput.icns'
 # Original WordMate W mark, no upstream brand asset.
