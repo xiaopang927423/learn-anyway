@@ -68,8 +68,45 @@ impl Engine {
             None => (String::new(), String::new()),
         };
         let scope = self.composition.scope();
-        if self.english_mode
-            || self.modes().is_expression(scope, self.zhuyin)
+        if self.english_mode {
+            if !scope
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_alphabetic)
+                || scope.len() < 3
+                || scope.len() > 64
+                || !scope
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'\'' | b'_' | b'-'))
+                || policy.slots == 0
+            {
+                return None;
+            }
+            let request = PredictionRequest {
+                sequence: self.prediction_sequence,
+                kind: PredictionKind::English,
+                before,
+                after,
+                pinyin: scope.to_owned(),
+                letters: scope.to_owned(),
+                syllables: 0,
+                candidates: candidates
+                    .iter()
+                    .take(PREDICTION_CANDIDATE_HINTS)
+                    .map(|c| c.text.clone())
+                    .collect(),
+                guess: String::new(),
+                max_items: policy.max_items,
+                want_sentence: false,
+                text: scope.to_owned(),
+                target_language: "en".into(),
+            };
+            self.last_prediction_kind = PredictionKind::English;
+            self.last_prediction_scope = scope.to_owned();
+            self.predictor.submit(request);
+            return Some(self.prediction_sequence);
+        }
+        if self.modes().is_expression(scope, self.zhuyin)
             || is_raw(scope, self.modes(), self.shuangpin, self.zhuyin)
         {
             return None;
@@ -187,7 +224,29 @@ impl Engine {
         while let Some(mut prediction) = self.predictor.poll() {
             if prediction.sequence == self.prediction_sequence {
                 // 问字的答案、翻译的译文和敲的拼音本来就对不上，只有组句联想的云端词要校验
-                if self.last_prediction_kind == PredictionKind::Question {
+                if self.last_prediction_kind == PredictionKind::English {
+                    let prefix = self.last_prediction_scope.to_ascii_lowercase();
+                    let mut seen = std::collections::HashSet::new();
+                    prediction.words.retain(|w| {
+                        let text = w.text.to_ascii_lowercase();
+                        w.text.len() <= 64
+                            && !w.text.is_empty()
+                            && w.text.bytes().all(|c| {
+                                c.is_ascii_alphanumeric() || matches!(c, b'\'' | b'_' | b'-')
+                            })
+                            && text.starts_with(&prefix)
+                            && text != prefix
+                            && seen.insert(text)
+                    });
+                    prediction
+                        .words
+                        .truncate(self.predictor.policy().max_items.min(8));
+                    for w in &mut prediction.words {
+                        w.text = crate::english::adapt_case(&w.text, &self.last_prediction_scope);
+                        w.syllables.clear();
+                    }
+                    prediction.sentence = None;
+                } else if self.last_prediction_kind == PredictionKind::Question {
                     let guess = &self.last_question_guess;
                     prediction
                         .words

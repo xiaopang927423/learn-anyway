@@ -53,7 +53,7 @@ impl CloudPage {
         note(
             layout,
             mtm,
-            "开启后组句时会把光标附近的几十个字发给下面的服务，让模型补全整句、联想下文；密码框里绝不发送。菜单栏图标旁会带一个云朵。",
+            "中文拼音与英文前缀都支持云候选：停键约300ms请求，最多发送光标前64/后32字符；只有确认采用才保存个人词条。密码框不发送，网络失败保留本地候选。",
         );
         let slot_titles: Vec<String> = (0..=MAX_CLOUD_SLOTS)
             .map(|n| match n {
@@ -89,7 +89,7 @@ impl CloudPage {
         note(
             layout,
             mtm,
-            "统一使用 WordMate 的模型、密钥与 Thinking 设置。先在桌面开启输入法云辅助；输入法不保存另一套密钥。Space 选中文，Option+Space 选英文，Tab 输入空格；可在快捷键页修改。",
+            "统一使用 WordMate 的模型、密钥与 Thinking 设置。先在桌面开启输入法云辅助；输入法不保存另一套密钥。中文 Space 上屏、Option+Space 采用译文、Tab 草稿空格；英文 Space 原词加空格、Tab 采用补全。个人词频参与排序，常用词重启保留。",
         );
         Self {
             local_model,

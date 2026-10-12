@@ -112,6 +112,10 @@ impl Learner for MutedLearner {
         self.inner.user_words()
     }
 
+    fn english_weight(&self, text: &str) -> u32 {
+        self.inner.english_weight(text)
+    }
+
     fn learn_english(&mut self, word: &str) {
         if !self.muted() {
             self.inner.learn_english(word);

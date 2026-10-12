@@ -70,7 +70,8 @@ async function startImeBridge(userData, db, changed = () => {}) {
             case 'prediction.query': {
               const settings = db.getSettings()
               if (!settings.imeEnabled || !settings.apiKey) throw Object.assign(new Error('请开启 WordMate 云辅助'), {code:'NOT_CONFIGURED'})
-              if (!['compose','question'].includes(p.kind) || ['before','after','pinyin','guess'].some(k=>typeof p[k]!=='string' || [...p[k]].length>200) || !Array.isArray(p.candidates) || p.candidates.length>20 || p.candidates.some(s=>typeof s!=='string'||s.length>200)) throw Object.assign(new Error('联想数据无效'),{code:'INVALID_INPUT'})
+              if (!['compose','question','english'].includes(p.kind) || ['before','after','pinyin','guess'].some(k=>typeof p[k]!=='string' || [...p[k]].length>200) || !Array.isArray(p.candidates) || p.candidates.length>20 || p.candidates.some(s=>typeof s!=='string'||s.length>200)) throw Object.assign(new Error('联想数据无效'),{code:'INVALID_INPUT'})
+              if (p.kind==='english' && !/^[A-Za-z][A-Za-z0-9_'\-]{2,63}$/.test(p.pinyin)) throw Object.assign(new Error('英文前缀无效'),{code:'INVALID_INPUT'})
               const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(5000)])
               return require('./model-request-queue').modelQueue.run('ime',()=>require('./ai').predictIme(p,settings,signal),{signal,deadline:Date.now()+5000})
             }

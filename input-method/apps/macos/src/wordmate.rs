@@ -570,6 +570,7 @@ impl BridgePredictor {
                 }
                 let kind = match r.kind {
                     qingjian_core::PredictionKind::Compose => "compose",
+                    qingjian_core::PredictionKind::English => "english",
                     qingjian_core::PredictionKind::Question => "question",
                     qingjian_core::PredictionKind::Translate => "translate",
                 };

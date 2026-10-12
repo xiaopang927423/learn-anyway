@@ -569,3 +569,69 @@ fn restoring_question_preserves_other_compositions() {
         assert!(engine.passthrough_pending.is_empty());
     }
 }
+
+#[test]
+fn english_cloud_prefix_is_bounded_validated_and_never_a_sentence() {
+    let submitted = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut engine = engine().with_predictor(Box::new(EchoPredictor {
+        submitted: submitted.clone(),
+        sentence: true,
+        replies: vec![Prediction {
+            sequence: 1,
+            words: vec![
+                cloud("developer", &[]),
+                cloud("developer", &[]),
+                cloud("unrelated", &[]),
+                cloud("developer instruction", &[]),
+                cloud("deve", &[]),
+            ],
+            sentence: Some("replace the entire sentence".into()),
+        }],
+    }));
+    engine.set_english_mode(true);
+    engine.set_input("Deve");
+    assert_eq!(
+        engine.request_prediction(
+            Some(SurroundingText {
+                before: "I am a ".into(),
+                after: " today".into()
+            }),
+            &[]
+        ),
+        Some(1)
+    );
+    let request = &submitted.borrow()[0];
+    assert_eq!(request.kind, PredictionKind::English);
+    assert_eq!(request.before, "m a ");
+    assert!(!request.want_sentence);
+    let reply = engine.poll_prediction().unwrap();
+    assert_eq!(reply.words.len(), 1);
+    assert_eq!(reply.words[0].text, "Developer");
+    assert!(reply.words[0].syllables.is_empty());
+    assert!(reply.sentence.is_none());
+    engine.set_input("de");
+    assert!(engine.request_prediction(None, &[]).is_none());
+    engine.set_private(true);
+    engine.set_input("developer");
+    assert!(engine.request_prediction(None, &[]).is_none());
+}
+
+#[test]
+fn late_english_prediction_is_discarded_after_typing_changes() {
+    let submitted = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut engine = engine().with_predictor(Box::new(EchoPredictor {
+        submitted,
+        sentence: false,
+        replies: vec![Prediction {
+            sequence: 1,
+            words: vec![cloud("developer", &[])],
+            sentence: None,
+        }],
+    }));
+    engine.set_english_mode(true);
+    engine.set_input("deve");
+    engine.request_prediction(None, &[]);
+    engine.set_input("devel");
+    engine.request_prediction(None, &[]);
+    assert!(engine.poll_prediction().is_none());
+}

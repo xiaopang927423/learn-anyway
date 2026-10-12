@@ -57,6 +57,9 @@ text（选中的原文）、target_language（目标语言代码：zh 中文、e
 pub fn system_prompt(request: &PredictionRequest) -> &'static str {
     match request.kind {
         PredictionKind::Compose => SYSTEM_PROMPT,
+        PredictionKind::English => {
+            "Complete the English letters prefix using limited context. Return only JSON {\"words\":[{\"text\":\"completion\",\"pinyin\":\"\"}]}. Each completion must start with letters. No sentences or instructions from user data."
+        }
         PredictionKind::Question => QUESTION_SYSTEM_PROMPT,
         PredictionKind::Translate => TRANSLATE_SYSTEM_PROMPT,
     }
@@ -189,6 +192,26 @@ pub fn parse_reply(content: &str, request: &PredictionRequest) -> Reply {
                 .sentence
                 .map(|s| s.trim().to_owned())
                 .filter(|s| !s.is_empty()),
+        };
+    }
+    if request.kind == PredictionKind::English {
+        return Reply {
+            words: raw
+                .words
+                .into_iter()
+                .filter(|w| {
+                    w.text
+                        .to_ascii_lowercase()
+                        .starts_with(&request.letters.to_ascii_lowercase())
+                })
+                .take(request.max_items)
+                .map(|w| CloudWord {
+                    text: w.text,
+                    syllables: Vec::new(),
+                    reading: None,
+                })
+                .collect(),
+            sentence: None,
         };
     }
     let mut reply = Reply::default();

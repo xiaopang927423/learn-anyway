@@ -250,10 +250,10 @@ fn english_mode_suggests_from_the_word_list_and_keeps_the_typed_text() {
     engine.set_input("foo1");
     assert!(texts_of(&engine).is_empty());
     assert_eq!(engine.query().unwrap().marked_text(), "foo1");
-    // 英文模式不发云联想
+    // 配置了联想器时，英文模式也可请求前缀补全。
     engine.set_input("comp");
-    assert_eq!(engine.request_prediction(None, &[]), None);
-    assert!(submitted.borrow().is_empty());
+    assert_eq!(engine.request_prediction(None, &[]), Some(1));
+    assert_eq!(submitted.borrow()[0].kind, PredictionKind::English);
     // 选中的词记次数，下次同样的前缀它靠前
     let compare = engine.query().unwrap().candidates.items[1].clone();
     assert_eq!(engine.commit(&compare), "compare");

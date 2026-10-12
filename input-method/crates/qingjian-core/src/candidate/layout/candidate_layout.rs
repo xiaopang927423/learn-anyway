@@ -68,7 +68,9 @@ impl CandidateLayout {
             {
                 continue;
             }
-            word.kind = CandidateKind::Cloud;
+            if word.kind != CandidateKind::English {
+                word.kind = CandidateKind::Cloud;
+            }
             self.cloud.push(word);
         }
         self.cloud.len()

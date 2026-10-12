@@ -83,7 +83,7 @@ impl Engine {
         let mut items: Vec<Candidate> = english::suggest(
             &self.english_lists(),
             scope,
-            |text| self.learner.weight(text),
+            |text| self.learner.english_weight(text),
             ENGLISH_MODE_CANDIDATES,
         )
         .into_iter()

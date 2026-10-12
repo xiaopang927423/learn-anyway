@@ -116,3 +116,16 @@ test('unclosed thinking blocks are not mistaken for a final JSON answer',async()
  global.fetch=async()=>{calls++;return {ok:true,json:async()=>({choices:[{message:{content:'<think>这是草稿 {"translation":"不能使用"}'}}]})}}
  try{await assert.rejects(ai.translatePassage('Hello','zh',{}),/格式异常/);assert.equal(calls,2)}finally{global.fetch=original}
 })
+
+test('English cloud completion validates prefixes, removes duplicates and never returns a sentence', async () => {
+ const original=global.fetch
+ global.fetch=async(url,options)=>{
+  const body=JSON.parse(options.body)
+  assert.match(body.messages[0].content,/英文输入法/)
+  return {ok:true,json:async()=>({choices:[{message:{content:JSON.stringify({words:[{text:'developer',syllables:[]},{text:'Developer',syllables:[]},{text:'development',syllables:[]},{text:'unrelated',syllables:[]},{text:'deve bad',syllables:[]}],sentence:'do not replace the sentence'})}}]})}
+ }
+ try {
+  const result=await ai.predictIme({kind:'english',pinyin:'deve',wantSentence:true,maxItems:1},{apiKey:'fixture',model:'diffu'},new AbortController().signal)
+  assert.deepEqual(result,{words:[{text:'developer',syllables:[]}],sentence:null})
+ }finally{global.fetch=original}
+})

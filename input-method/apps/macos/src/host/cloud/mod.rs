@@ -76,7 +76,13 @@ impl Host {
                 items: prediction
                     .words
                     .into_iter()
-                    .map(CloudWord::into_candidate)
+                    .map(|word| {
+                        let mut candidate = word.into_candidate();
+                        if self.engine.english_mode() {
+                            candidate.kind = CandidateKind::English;
+                        }
+                        candidate
+                    })
                     .collect(),
             };
             self.engine.annotate(&mut words);

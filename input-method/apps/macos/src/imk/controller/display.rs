@@ -142,7 +142,7 @@ impl WordMateInputController {
             client.set_marked_text("", 0);
         }
         // 先发联想再画：发出去就留好云端槽位，画出来的第一帧本地候选就已经在最终位置
-        if !marked.is_empty() && !host::with(|h| h.engine.english_mode()).unwrap_or(false) {
+        if !marked.is_empty() {
             let candidates = host::with(|h| h.session.layout.local().to_vec()).unwrap_or_default();
             self.request_prediction(client, &candidates);
         }

@@ -173,6 +173,28 @@ fn main() {
         }
     }
 
+    if args.iter().any(|a| a == "--prediction-smoke") {
+        for (kind, prefix, guess) in [("english", "deve", ""), ("compose", "xinghe", "星河")] {
+            match wordmate::rpc(
+                "prediction.query",
+                serde_json::json!({"kind":kind,"pinyin":prefix,"before":"","after":"","guess":guess,"candidates":[],"maxItems":2,"wantSentence":false}),
+            ) {
+                Ok(value) => {
+                    let count = value["words"].as_array().map_or(0, |words| words.len());
+                    if count == 0 {
+                        eprintln!("IME_PREDICTION_EMPTY {kind}");
+                        std::process::exit(1);
+                    }
+                    println!("IME_PREDICTION_OK {kind} words={count}");
+                }
+                Err(code) => {
+                    eprintln!("IME_PREDICTION_FAILED {kind} {code}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        return;
+    }
     if args.iter().any(|a| a == "--interaction-smoke") {
         NSApplication::sharedApplication(mtm);
         imk::interaction_smoke::run();

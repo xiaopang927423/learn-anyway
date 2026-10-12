@@ -12,6 +12,11 @@ pub trait Learner: Send {
     /// 该词被用户选择过的次数，没记录返回 0。
     fn weight(&self, text: &str) -> u32;
 
+    /// Includes repeated literal English word input, not only candidate selection.
+    fn english_weight(&self, text: &str) -> u32 {
+        self.weight(text)
+    }
+
     /// 用户在输入串 `input`（候选覆盖的那段拼音，不含分隔符）下选了 `text`。
     /// 词级排序里同一输入串下选过的词排最前（`mgs` 选过 美国式，下次 `mgs` 它就是首选），与不分输入的 [`Self::weight`] 分开记：
     /// `ba` 下选的是 吧，`bazhege` 下选的是 把，混在一起数就分不清。

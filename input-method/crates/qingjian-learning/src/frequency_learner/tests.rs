@@ -354,3 +354,73 @@ fn confirmed_phrase_survives_reload_and_participates_in_candidates() {
     );
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn bilingual_common_words_survive_reload_and_literal_english_improves_ranking() {
+    use qingjian_core::{CandidateKind, Engine};
+    let dir = std::env::temp_dir().join(format!(
+        "wordmate-bilingual-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("user.tsv");
+    let dict = || Dictionary::parse("星\txing\t100\n河\the\t100\n").unwrap();
+    let english = || WordList::parse("company\tcompany\t900\ncompass\tcompass\t10\n").unwrap();
+    let mut engine = Engine::new(dict())
+        .with_english(english())
+        .with_learner(Box::new(FrequencyLearner::from_path(&path).unwrap()));
+    engine.set_english_mode(true);
+    for _ in 0..5 {
+        engine.set_input("compass");
+        assert_eq!(engine.take_raw(), "compass");
+    }
+    engine.set_input("comp");
+    assert_eq!(engine.query().unwrap().candidates.items[0].text, "compass");
+    engine.set_english_mode(false);
+    engine.set_input("xinghe");
+    let candidate = Candidate {
+        text: "星河".into(),
+        kind: CandidateKind::Cloud,
+        syllables: vec!["xing".into(), "he".into()],
+        reading: None,
+        translation: None,
+        aux_code: None,
+    };
+    assert!(
+        engine.learner().user_words().is_none(),
+        "preview must not learn"
+    );
+    engine.commit(&candidate);
+    engine.flush_learning();
+    let restored = FrequencyLearner::from_path(&path).unwrap();
+    assert_eq!(restored.english_weight("COMPASS"), 5);
+    assert_eq!(restored.weight("星河"), 1);
+    let mut reopened = Engine::new(dict())
+        .with_english(english())
+        .with_learner(Box::new(restored));
+    reopened.set_input("xinghe");
+    assert!(
+        reopened
+            .query()
+            .unwrap()
+            .candidates
+            .items
+            .iter()
+            .any(|c| c.text == "星河")
+    );
+    reopened.set_english_mode(true);
+    reopened.set_input("comp");
+    assert_eq!(
+        reopened.query().unwrap().candidates.items[0].text,
+        "compass"
+    );
+    reopened.set_learning(false);
+    reopened.set_input("compass");
+    reopened.take_raw();
+    assert_eq!(reopened.learner().english_weight("compass"), 5);
+    std::fs::remove_dir_all(dir).unwrap();
+}

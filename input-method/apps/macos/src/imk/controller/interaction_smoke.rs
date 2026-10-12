@@ -816,6 +816,76 @@ pub(crate) fn run() {
     let _: () = unsafe { msg_send![&*recorder, keyDown: &*e] };
     assert_eq!(recorder.recorded(), "control+j");
     assert_ne!(recorder.title().to_string(), "按下新的快捷键…");
+    struct CompletionFixture {
+        reply: Option<qingjian_core::Prediction>,
+    }
+    impl qingjian_core::Predictor for CompletionFixture {
+        fn policy(&self) -> qingjian_core::PredictionPolicy {
+            qingjian_core::PredictionPolicy {
+                before: 0,
+                after: 0,
+                slots: 2,
+                max_items: 2,
+                sentence: false,
+            }
+        }
+        fn submit(&mut self, request: qingjian_core::PredictionRequest) {
+            if request.kind == qingjian_core::PredictionKind::English {
+                self.reply = Some(qingjian_core::Prediction {
+                    sequence: request.sequence,
+                    words: vec![qingjian_core::CloudWord {
+                        text: "devetool".into(),
+                        syllables: Vec::new(),
+                        reading: None,
+                    }],
+                    sentence: None,
+                });
+            }
+        }
+        fn poll(&mut self) -> Option<qingjian_core::Prediction> {
+            self.reply.take()
+        }
+    }
+    host::with(|h| {
+        h.engine.clear();
+        h.cloud_slots = 2;
+        h.engine
+            .set_predictor(Box::new(CompletionFixture { reply: None }));
+    });
+    modifiers::set_english_mode(true);
+    for c in "deve".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        h.poll_prediction();
+        assert!(
+            h.engine
+                .learner()
+                .user_english()
+                .and_then(|words| words.get("devetool"))
+                .is_none(),
+            "cloud preview must not save a word"
+        );
+        h.session.highlighted = (0..h.session.layout.len())
+            .find(|&i| {
+                h.session.candidate(i).is_some_and(|c| {
+                    c.text == "devetool" && c.kind == qingjian_core::CandidateKind::English
+                })
+            })
+            .expect("English cloud slot candidate");
+    });
+    let before = fixture.ivars().inserts.get();
+    event("\t", 48, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "devetool");
+    assert_eq!(fixture.ivars().inserts.get(), before + 1);
+    host::with(|h| {
+        assert_eq!(
+            h.engine.learner().user_english().unwrap().get("devetool"),
+            Some("devetool")
+        );
+        h.engine.flush_learning();
+        h.engine.set_predictor(Box::new(qingjian_core::NoPredictor));
+    });
     modifiers::set_english_mode(false);
     host::with(|h| {
         h.window.hide();

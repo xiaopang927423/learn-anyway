@@ -13,6 +13,14 @@ impl Learner for FrequencyLearner {
         self.counts.get(text).copied().unwrap_or(0)
     }
 
+    fn english_weight(&self, text: &str) -> u32 {
+        self.weight(text).max(
+            self.english
+                .get(&text.to_ascii_lowercase())
+                .map_or(0, |entry| entry.1),
+        )
+    }
+
     fn record_choice(&mut self, input: &str, text: &str) {
         if input.is_empty() || text.is_empty() {
             return;

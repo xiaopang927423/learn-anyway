@@ -5,6 +5,9 @@ pub enum PredictionKind {
     #[default]
     Compose,
 
+    /// English prefix completions; no Chinese syllables or automatic sentence replacement.
+    English,
+
     /// 问字模式（`?` 开头）：用拼音问「三个木是什么字」之类的问题，要答案（字或短答案）与读音。
     Question,
 
