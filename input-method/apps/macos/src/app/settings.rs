@@ -143,7 +143,33 @@ impl Settings {
 
     fn read(&mut self, path: &Path) {
         match Config::load(path) {
-            Ok(config) => {
+            Ok(mut config) => {
+                if config.apps.migrate_legacy_macos_defaults() {
+                    let backup = path.with_extension("pre-v060-ide.toml");
+                    let saved = backup.exists()
+                        || std::fs::read(path).ok().is_some_and(|bytes| {
+                            qingjian_core::storage::write_atomic_private(&backup, |f| {
+                                f.write_all(&bytes)
+                            })
+                            .is_ok()
+                        });
+                    if saved {
+                        let values: toml_edit::Array = config
+                            .apps
+                            .english_candidates_off
+                            .iter()
+                            .map(String::as_str)
+                            .collect();
+                        if Config::set_value(path, "apps", "english_candidates_off", values)
+                            .is_err()
+                        {
+                            tracing::warn!("IDE 候选默认策略已生效，但配置迁移未写回");
+                        }
+                    } else {
+                        tracing::warn!("旧配置备份失败，仅应用运行时 IDE 候选策略");
+                    }
+                    tracing::info!("IDE 英文黑框已启用；终端直通、用户自定义名单保留");
+                }
                 tracing::info!(
                     path = %path.display(),
                     predict = config.predict.enabled,

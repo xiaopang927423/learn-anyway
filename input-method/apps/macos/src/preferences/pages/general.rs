@@ -169,7 +169,7 @@ impl GeneralPage {
         );
         let english_off_in_apps = checkbox(
             mtm,
-            "但在终端和代码编辑器里不给",
+            "在名单中的应用关闭英文补全",
             Setting::EnglishCandidatesOffInApps,
             target,
         );
@@ -177,7 +177,7 @@ impl GeneralPage {
         note(
             layout,
             mtm,
-            "终端、iTerm、Warp、Ghostty、VS Code、Cursor、Zed、JetBrains、Xcode 等，那里的候选窗口会挡住应用自己的补全；名单可在配置文件里改。",
+            "默认仅终端、iTerm、Warp、Ghostty 等直通；JetBrains、VS Code、Cursor、Xcode 等 IDE 显示英文黑框。取消勾选可处处显示；需要关闭某个 IDE 时在配置文件 apps.english_candidates_off 加入其 bundle ID。",
         );
         let chinese_first = checkbox(
             mtm,

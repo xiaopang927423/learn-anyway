@@ -341,6 +341,7 @@ pub(crate) fn run() {
     host::with(|h| {
         h.assistant.invalidate(true);
         h.engine.clear();
+        h.apps.english_candidates_off.push("com.jetbrains.*".into());
         assert!(h.apps.english_candidates_off("com.jetbrains.intellij"));
     });
     let before = fixture.ivars().inserts.get();
@@ -583,6 +584,7 @@ pub(crate) fn run() {
     );
     // v0.6.0 English mode: test real dispatch, never bypass the Chinese binding priority.
     host::with(|h| {
+        h.apps = qingjian_platform::AppsConfig::default();
         h.engine.clear();
         h.assistant.draft.clear();
         h.assistant.draft_cursor = None;
@@ -713,9 +715,34 @@ pub(crate) fn run() {
     );
     event("E", 14, toggle_flags);
     *fixture.ivars().bundle.borrow_mut() = "com.jetbrains.intellij".into();
+    for c in "bre".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    host::with(|h| {
+        assert!(
+            h.window.is_visible(),
+            "IDE English candidate window must be visible"
+        );
+        h.session.highlighted = (0..h.session.layout.len())
+            .find(|&i| {
+                h.session
+                    .candidate(i)
+                    .is_some_and(|c| c.text == "breakfast")
+            })
+            .expect("IDE breakfast completion");
+    });
+    event("\t", 48, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "breakfast");
+    host::with(|h| h.apps.english_candidates_off.push("com.jetbrains.*".into()));
     assert!(
         !returned("i", 34, none),
-        "IDE English stays direct passthrough"
+        "explicit IDE exclusion remains direct passthrough"
+    );
+    host::with(|h| h.apps = qingjian_platform::AppsConfig::default());
+    *fixture.ivars().bundle.borrow_mut() = "com.apple.Terminal".into();
+    assert!(
+        !returned("i", 34, none),
+        "terminal default remains direct passthrough"
     );
     host::with(|h| assert!(h.engine.composition().is_empty()));
     *fixture.ivars().bundle.borrow_mut() = "com.apple.TextEdit".into();

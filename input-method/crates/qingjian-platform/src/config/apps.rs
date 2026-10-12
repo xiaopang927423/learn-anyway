@@ -1,8 +1,18 @@
 use serde::{Deserialize, Serialize};
 
-/// 缺省不给英文候选的应用（macOS，按 bundle identifier）：终端、代码编辑器、IDE。这些地方的英文候选窗口会挡住应用自己的补全，
+/// macOS 缺省只在终端关闭英文候选；IDE/代码编辑器显示英文黑框。
 /// vim / nano 里 Tab 与方向键又都有别的意思。`*` 结尾是前缀匹配。
 pub const DEFAULT_ENGLISH_CANDIDATES_OFF_MACOS: &[&str] = &[
+    "com.apple.Terminal",
+    "com.googlecode.iterm2",
+    "dev.warp.Warp-Stable",
+    "com.mitchellh.ghostty",
+    "io.alacritty",
+    "net.kovidgoyal.kitty",
+];
+
+/// Previous stock macOS list, used only for exact-default migration.
+pub const LEGACY_ENGLISH_CANDIDATES_OFF_MACOS: &[&str] = &[
     "com.apple.Terminal",
     "com.googlecode.iterm2",
     "dev.warp.Warp-Stable",
@@ -113,6 +123,24 @@ impl AppsConfig {
         }
     }
 
+    /// Upgrade only an untouched stock list; explicit/custom application exclusions remain intact.
+    pub fn migrate_legacy_macos_defaults(&mut self) -> bool {
+        if self
+            .english_candidates_off
+            .iter()
+            .map(String::as_str)
+            .eq(LEGACY_ENGLISH_CANDIDATES_OFF_MACOS.iter().copied())
+        {
+            self.english_candidates_off = DEFAULT_ENGLISH_CANDIDATES_OFF_MACOS
+                .iter()
+                .map(|s| (*s).to_owned())
+                .collect();
+            true
+        } else {
+            false
+        }
+    }
+
     /// 这个应用里英文模式要不要关掉候选。`app` 不认识（应用没给）按不关。
     pub fn english_candidates_off(&self, app: &str) -> bool {
         self.english_candidates_off
@@ -148,12 +176,27 @@ mod tests {
     fn macos_list_covers_terminals_and_ides_with_prefix_patterns() {
         let apps = AppsConfig::with_english_candidates_off(DEFAULT_ENGLISH_CANDIDATES_OFF_MACOS);
         assert!(apps.english_candidates_off("com.apple.Terminal"));
-        assert!(apps.english_candidates_off("com.jetbrains.intellij"));
-        assert!(apps.english_candidates_off("com.jetbrains.rustrover"));
-        assert!(apps.english_candidates_off("COM.MICROSOFT.VSCODE"));
+        assert!(!apps.english_candidates_off("com.jetbrains.intellij"));
+        assert!(!apps.english_candidates_off("com.jetbrains.rustrover"));
+        assert!(!apps.english_candidates_off("COM.MICROSOFT.VSCODE"));
         assert!(!apps.english_candidates_off("com.apple.TextEdit"));
         assert!(!apps.english_candidates_off("com.jetbrains"));
         assert!(!apps.english_candidates_off(""));
+    }
+
+    #[test]
+    fn old_stock_list_migrates_once_but_custom_restrictions_survive() {
+        let mut legacy =
+            AppsConfig::with_english_candidates_off(LEGACY_ENGLISH_CANDIDATES_OFF_MACOS);
+        assert!(legacy.migrate_legacy_macos_defaults());
+        assert!(!legacy.english_candidates_off("com.jetbrains.intellij"));
+        assert!(legacy.english_candidates_off("com.apple.Terminal"));
+        assert!(!legacy.migrate_legacy_macos_defaults());
+        let mut custom = AppsConfig::with_english_candidates_off(&["com.jetbrains.*"]);
+        assert!(!custom.migrate_legacy_macos_defaults());
+        assert!(custom.english_candidates_off("com.jetbrains.intellij"));
+        let mut empty = AppsConfig::with_english_candidates_off(&[]);
+        assert!(!empty.migrate_legacy_macos_defaults());
     }
 
     #[test]
@@ -188,7 +231,7 @@ mod tests {
             "Windows 缺省名单按 exe 名"
         );
         assert_eq!(
-            apps.english_candidates_off("com.microsoft.VSCode"),
+            apps.english_candidates_off("com.apple.Terminal"),
             cfg!(target_os = "macos"),
             "macOS 缺省名单按 bundle identifier"
         );
