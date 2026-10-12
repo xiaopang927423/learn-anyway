@@ -12,6 +12,7 @@ impl WordMateInputController {
             h.cancel_prediction();
         });
         modifiers::set_english_mode(!modifiers::english_mode());
+        tracing::info!(english = modifiers::english_mode(), "WM_KEYBOARD_MODE");
         host::with(|h| h.indicator.update());
     }
 

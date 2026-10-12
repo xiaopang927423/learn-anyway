@@ -727,6 +727,7 @@ pub(crate) fn run() {
         controller.dispatch_event(&e, client);
     };
     shift_event(56, NSEventModifierFlags::Shift);
+    shift_event(56, NSEventModifierFlags::Shift);
     assert!(
         !modifiers::english_mode(),
         "Shift down alone must not switch yet"
@@ -735,6 +736,11 @@ pub(crate) fn run() {
     assert!(
         modifiers::english_mode(),
         "Shift tap release switches to English"
+    );
+    shift_event(56, none);
+    assert!(
+        modifiers::english_mode(),
+        "duplicate release must not toggle back"
     );
     shift_event(60, NSEventModifierFlags::Shift);
     event("A", 0, NSEventModifierFlags::Shift);

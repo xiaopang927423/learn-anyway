@@ -63,6 +63,11 @@ define_class!(
         // define_class! 会把返回类型转成 ObjC BOOL，方法体里不能用 `return`，逻辑放在下面的 inherent impl
         #[unsafe(method(handleEvent:client:))]
         fn handle_event(&self, event: Option<&NSEvent>, client: Option<&AnyObject>) -> bool {
+            if let Some(event) = event {
+                if event.r#type() == NSEventType::FlagsChanged {
+                    tracing::info!(key = event.keyCode(), flags = event.modifierFlags().bits(), client_present = client.is_some(), "WM_SHIFT_EVENT");
+                }
+            }
             match (event, client) {
                 (Some(event), Some(client)) => {
                     let client = TextClient::new(client);
@@ -254,12 +259,18 @@ impl WordMateInputController {
                 ),
                 event.timestamp(),
             );
+            tracing::info!(
+                enabled,
+                switch,
+                english = modifiers::english_mode(),
+                "WM_SHIFT_DECISION"
+            );
             if enabled && switch {
                 self.toggle_keyboard(client);
             }
             return false;
         }
-        self.ivars().shift_tap.borrow_mut().cancel();
+        self.ivars().shift_tap.borrow_mut().interrupt();
         host::with(|h| {
             h.watch.start();
             // Retained proxies exist only for the active generation; deactivate clears both.
