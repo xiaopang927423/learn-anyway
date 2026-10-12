@@ -193,7 +193,12 @@ impl Host {
             ))
         } else if self.engine.english_mode() {
             Some(format!(
-                "英文 · Space 空格 · Tab 补全 · {} 中英切换",
+                "英文 · Space 空格 · Tab 补全 · {}{} 中英切换",
+                if self.settings.config().shortcut.switch_mode.shift {
+                    "单击 Shift / "
+                } else {
+                    ""
+                },
                 self.settings.config().shortcut.toggle_english_key().label()
             ))
         } else {

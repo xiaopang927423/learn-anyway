@@ -178,6 +178,12 @@ fn main() {
         imk::interaction_smoke::run();
         return;
     }
+    // A direct settings entry point; no competing IMK server for a settings-only process.
+    if args.iter().any(|a| a == "--preferences") {
+        host::with(|h| h.preferences.show());
+        NSApplication::sharedApplication(mtm).run();
+        return;
+    }
     // IMKServer 需要在主线程创建，并在整个进程生命周期内活着
     let server = unsafe {
         IMKServer::initWithName_bundleIdentifier(

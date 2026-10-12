@@ -43,6 +43,7 @@ pub struct ShortcutsPage {
     confirm_translation: Retained<KeyRecorder>,
     insert_space: Retained<KeyRecorder>,
     toggle_english: Retained<KeyRecorder>,
+    shift_switch: Retained<NSButton>,
 }
 
 impl ShortcutsPage {
@@ -99,6 +100,13 @@ impl ShortcutsPage {
             "勾上后 ? 先进问字（中英文模式都行），后面跟字母才是问题，跟空格、回车等其他键时还原成问号；不勾问号就是问号。",
         );
         layout.space(GROUP_GAP);
+        let shift_switch = checkbox(mtm, "单击 Shift 切换中英文", Setting::ShiftSwitch, target);
+        row_checkbox(layout, &shift_switch);
+        note(
+            layout,
+            mtm,
+            "默认单击左/右 Shift 切换；按住 Shift 输入大写或组合键不会切换。也可关闭单击切换，使用下方自定义组合键。",
+        );
         let toggle_english = row_recorder(
             layout,
             mtm,
@@ -110,7 +118,7 @@ impl ShortcutsPage {
         note(
             layout,
             mtm,
-            "英文键盘：Space 原词加空格；Tab 采用补全；数字、标点直接输入。默认 Ctrl+Shift+E 切换，也可使用 Caps Lock。切换先保留正在输入的原文。中文模式仍是 Space 上屏、Tab 草稿空格。",
+            "英文键盘：Space 原词加空格；Tab 采用补全；数字、标点直接输入。默认单击 Shift 切换，Ctrl+Shift+E 也可切换，也可使用 Caps Lock。切换先保留正在输入的原文。中文模式仍是 Space 上屏、Tab 草稿空格。",
         );
         let confirm_original = row_recorder(
             layout,
@@ -220,10 +228,12 @@ impl ShortcutsPage {
             confirm_translation,
             insert_space,
             toggle_english,
+            shift_switch,
         }
     }
 
     pub fn sync(&self, config: &Config) {
+        set_checked(&self.shift_switch, config.shortcut.switch_mode.shift);
         let toggle = config.shortcut.toggle_english_key();
         self.toggle_english
             .show(&toggle.key_string(), &toggle.label());

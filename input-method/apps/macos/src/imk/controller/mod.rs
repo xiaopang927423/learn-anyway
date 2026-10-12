@@ -5,8 +5,8 @@
 
 use objc2::rc::{Allocated, Retained};
 use objc2::runtime::{AnyObject, Sel};
-use objc2::{define_class, msg_send, sel};
-use objc2_app_kit::{NSEvent, NSEventModifierFlags, NSEventType, NSMenu};
+use objc2::{DefinedClass, define_class, msg_send, sel};
+use objc2_app_kit::{NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSMenu};
 use objc2_foundation::NSObjectProtocol;
 use objc2_input_method_kit::{IMKInputController, IMKServer};
 use qingjian_core::{Candidate, QUESTION_PREFIX};
@@ -22,6 +22,12 @@ mod commit;
 mod display;
 mod draft;
 mod english;
+mod shift_tap;
+
+#[derive(Default)]
+pub struct InputState {
+    shift_tap: std::cell::RefCell<shift_tap::ShiftTap>,
+}
 pub(crate) mod interaction_smoke;
 mod text;
 mod translate;
@@ -33,7 +39,7 @@ define_class!(
     #[unsafe(super(IMKInputController))]
     // 名字要和 Info.plist 的 InputMethodServerControllerClass 一致
     #[name = "WordMateInputController"]
-    #[ivars = ()]
+    #[ivars = InputState]
     pub struct WordMateInputController;
 
     impl WordMateInputController {
@@ -46,7 +52,7 @@ define_class!(
             client: Option<&AnyObject>,
         ) -> Option<Retained<Self>> {
             tracing::info!("新建输入会话");
-            let this = this.set_ivars(());
+            let this = this.set_ivars(InputState::default());
             unsafe { msg_send![super(this), initWithServer: server, delegate: delegate, client: client] }
         }
 
@@ -71,9 +77,15 @@ define_class!(
             }
         }
 
+        #[unsafe(method(recognizedEvents:))]
+        fn recognized_events(&self, _sender: Option<&AnyObject>) -> usize {
+            (NSEventMask::KeyDown | NSEventMask::FlagsChanged).bits() as usize
+        }
+
         /// 应用要求立刻结束本次输入（切换焦点、切换输入法等）。
         #[unsafe(method(commitComposition:))]
         fn commit_composition(&self, client: Option<&AnyObject>) {
+            self.ivars().shift_tap.borrow_mut().cancel();
             let client = client.map(TextClient::new);
             let done = catch_panic("commitComposition", || {
                 if let Some(client) = client {
@@ -131,6 +143,7 @@ define_class!(
         #[unsafe(method(deactivateServer:))]
         fn deactivate_server(&self, sender: Option<&AnyObject>) {
             tracing::info!("deactivateServer");
+            self.ivars().shift_tap.borrow_mut().cancel();
             let client = sender.map(TextClient::new);
             let done = catch_panic("deactivateServer", || {
                 if let Some(client) = client {
@@ -203,10 +216,16 @@ impl WordMateInputController {
 
     /// 一个按键事件的分发：只管按下；Cmd / Ctrl 组合除 Cmd+左右外一律交给应用；命令键映射成选择器；其余按字符当文本。
     fn dispatch_event(&self, event: &NSEvent, client: TextClient<'_>) -> bool {
-        if event.r#type() != NSEventType::KeyDown || self.in_login_window() {
+        if !matches!(
+            event.r#type(),
+            NSEventType::KeyDown | NSEventType::FlagsChanged
+        ) || self.in_login_window()
+        {
+            self.ivars().shift_tap.borrow_mut().cancel();
             return false;
         }
         if secure_input::enabled() {
+            self.ivars().shift_tap.borrow_mut().cancel();
             host::with(|h| {
                 h.assistant.draft.clear();
                 h.assistant.draft_cursor = None;
@@ -221,6 +240,26 @@ impl WordMateInputController {
             });
             return false;
         }
+        if event.r#type() == NSEventType::FlagsChanged {
+            let flags = event.modifierFlags();
+            let enabled =
+                host::with(|h| h.settings.config().shortcut.switch_mode.shift).unwrap_or(true);
+            let switch = self.ivars().shift_tap.borrow_mut().flags(
+                event.keyCode(),
+                flags.contains(NSEventModifierFlags::Shift),
+                flags.intersects(
+                    NSEventModifierFlags::Command
+                        | NSEventModifierFlags::Control
+                        | NSEventModifierFlags::Option,
+                ),
+                event.timestamp(),
+            );
+            if enabled && switch {
+                self.toggle_keyboard(client);
+            }
+            return false;
+        }
+        self.ivars().shift_tap.borrow_mut().cancel();
         host::with(|h| {
             h.watch.start();
             // Retained proxies exist only for the active generation; deactivate clears both.
@@ -312,16 +351,7 @@ impl WordMateInputController {
         let toggle = host::with(|h| h.settings.config().shortcut.toggle_english_key())
             .unwrap_or_else(|| qingjian_platform::ShortcutConfig::default().toggle_english_key());
         if matches(toggle) {
-            if host::with(|h| h.is_composing()).unwrap_or(false) {
-                self.commit_raw(client);
-            }
-            host::with(|h| {
-                h.end_translation();
-                h.assistant.invalidate(true);
-                h.cancel_prediction();
-            });
-            modifiers::set_english_mode(!modifiers::english_mode());
-            host::with(|h| h.indicator.update());
+            self.toggle_keyboard(client);
             return true;
         }
         // English boundaries and Tab completion must precede Chinese adoption bindings.

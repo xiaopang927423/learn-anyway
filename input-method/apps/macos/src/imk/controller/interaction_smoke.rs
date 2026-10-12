@@ -63,7 +63,7 @@ pub(crate) fn run() {
     let fixture: Retained<FixtureClient> = unsafe { msg_send![super(allocated), init] };
     let object: &AnyObject = &fixture;
     // No system IMK connection: this fixture tests our dispatch against a fake text client.
-    let allocated = WordMateInputController::alloc().set_ivars(());
+    let allocated = WordMateInputController::alloc().set_ivars(InputState::default());
     let controller: Retained<WordMateInputController> =
         unsafe { msg_send![super(allocated), init] };
     let client = TextClient::new(object);
@@ -718,6 +718,71 @@ pub(crate) fn run() {
         "IDE English stays direct passthrough"
     );
     host::with(|h| assert!(h.engine.composition().is_empty()));
+    *fixture.ivars().bundle.borrow_mut() = "com.apple.TextEdit".into();
+    modifiers::set_english_mode(false);
+    let shift_event = |code: u16, flags: NSEventModifierFlags| {
+        let string = NSString::from_str("");
+        let e = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+            NSEventType::FlagsChanged, NSPoint::ZERO, flags, 0., 0, None, &string, &string, false, code).unwrap();
+        controller.dispatch_event(&e, client);
+    };
+    shift_event(56, NSEventModifierFlags::Shift);
+    assert!(
+        !modifiers::english_mode(),
+        "Shift down alone must not switch yet"
+    );
+    shift_event(56, none);
+    assert!(
+        modifiers::english_mode(),
+        "Shift tap release switches to English"
+    );
+    shift_event(60, NSEventModifierFlags::Shift);
+    event("A", 0, NSEventModifierFlags::Shift);
+    shift_event(60, none);
+    assert!(modifiers::english_mode(), "Shift+A must not switch mode");
+    event(" ", 49, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "A ");
+    shift_event(60, NSEventModifierFlags::Shift);
+    shift_event(60, none);
+    assert!(!modifiers::english_mode(), "Right Shift tap switches back");
+    host::with(|h| {
+        h.change_setting(
+            crate::preferences::Setting::ShiftSwitch,
+            crate::preferences::SettingValue::Bool(false),
+        )
+    });
+    shift_event(56, NSEventModifierFlags::Shift);
+    shift_event(56, none);
+    assert!(
+        !modifiers::english_mode(),
+        "User disabled Shift switch must be respected"
+    );
+    host::with(|h| {
+        h.change_setting(
+            crate::preferences::Setting::ShiftSwitch,
+            crate::preferences::SettingValue::Bool(true),
+        )
+    });
+    // Exercise the Objective-C button activation entry points, not just a Rust helper.
+    let mtm = objc2::MainThreadMarker::new().unwrap();
+    let recorder = crate::preferences::KeyRecorder::new(mtm, false);
+    recorder.show("control+shift+e", "Ctrl+Shift+E");
+    let _: () = unsafe { msg_send![&*recorder, performClick: std::ptr::null::<AnyObject>()] };
+    assert_eq!(recorder.title().to_string(), "按下新的快捷键…");
+    let key = NSString::from_str("j");
+    let e = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+        NSEventType::KeyDown, NSPoint::ZERO, NSEventModifierFlags::Control, 0., 0, None, &key, &key, false, 38).unwrap();
+    let _: () = unsafe { msg_send![&*recorder, keyDown: &*e] };
+    assert_eq!(recorder.recorded(), "control+j");
+    let started: bool = unsafe { msg_send![&*recorder, accessibilityPerformPress] };
+    assert!(started);
+    assert_eq!(recorder.title().to_string(), "按下新的快捷键…");
+    let esc = NSString::from_str("");
+    let e = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+        NSEventType::KeyDown, NSPoint::ZERO, none, 0., 0, None, &esc, &esc, false, 53).unwrap();
+    let _: () = unsafe { msg_send![&*recorder, keyDown: &*e] };
+    assert_eq!(recorder.recorded(), "control+j");
+    assert_ne!(recorder.title().to_string(), "按下新的快捷键…");
     modifiers::set_english_mode(false);
     host::with(|h| {
         h.window.hide();

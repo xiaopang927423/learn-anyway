@@ -2,6 +2,19 @@
 use super::*;
 
 impl WordMateInputController {
+    pub(super) fn toggle_keyboard(&self, client: TextClient<'_>) {
+        if host::with(|h| h.is_composing()).unwrap_or(false) {
+            self.commit_raw(client);
+        }
+        host::with(|h| {
+            h.end_translation();
+            h.assistant.invalidate(true);
+            h.cancel_prediction();
+        });
+        modifiers::set_english_mode(!modifiers::english_mode());
+        host::with(|h| h.indicator.update());
+    }
+
     fn prepare_english(&self, client: TextClient<'_>) {
         let previous =
             host::with(|h| h.is_composing() && !h.engine.english_mode()).unwrap_or(false);

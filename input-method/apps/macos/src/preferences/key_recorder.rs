@@ -38,6 +38,7 @@ define_class!(
     pub struct KeyRecorder;
 
     impl KeyRecorder {
+
         #[unsafe(method(acceptsFirstResponder))]
         fn accepts_first_responder(&self) -> bool {
             true
@@ -46,12 +47,17 @@ define_class!(
         /// 点击：进入录制，成为第一响应者。不调父类，免得当成普通按钮点击发 action。
         #[unsafe(method(mouseDown:))]
         fn mouse_down(&self, _event: &NSEvent) {
-            if let Some(window) = self.window() {
-                window.makeFirstResponder(Some(self));
-            }
-            self.ivars().recording.set(true);
-            self.setTitle(&NSString::from_str(RECORDING_TITLE));
+            self.begin_recording();
         }
+
+        #[unsafe(method(performClick:))]
+        fn perform_click(&self, _sender: Option<&AnyObject>) { self.begin_recording(); }
+
+        #[unsafe(method(accessibilityPerformPress))]
+        fn accessibility_press(&self) -> bool { self.begin_recording(); true }
+
+        #[unsafe(method(acceptsFirstMouse:))]
+        fn accepts_first_mouse(&self, _event: Option<&NSEvent>) -> bool { true }
 
         #[unsafe(method(keyDown:))]
         fn key_down(&self, event: &NSEvent) {
@@ -125,6 +131,17 @@ define_class!(
 );
 
 impl KeyRecorder {
+    fn begin_recording(&self) {
+        if let Some(window) = self.window() {
+            window.makeKeyWindow();
+            if !window.makeFirstResponder(Some(self)) {
+                return;
+            }
+        }
+        self.ivars().recording.set(true);
+        self.setTitle(&NSString::from_str(RECORDING_TITLE));
+    }
+
     /// `modifiers_only` 为真时只记修饰键组合。
     pub fn new(mtm: MainThreadMarker, modifiers_only: bool) -> Retained<Self> {
         let this = mtm.alloc::<Self>().set_ivars(Ivars {

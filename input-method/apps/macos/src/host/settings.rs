@@ -341,8 +341,21 @@ impl Host {
                     }
                 }
             }
+            (Setting::ShiftSwitch, SettingValue::Bool(on)) => {
+                let mut switches = config.shortcut.switch_mode;
+                switches.shift = on;
+                let values: toml_edit::Array = switches.config_values().iter().copied().collect();
+                self.settings.set_value("shortcut", "switch_mode", values);
+            }
             (Setting::ResetShortcuts, _) => {
                 let defaults = ShortcutConfig::default();
+                self.settings.set_value(
+                    "shortcut",
+                    "switch_mode",
+                    toml_edit::Array::from_iter(
+                        defaults.switch_mode.config_values().iter().copied(),
+                    ),
+                );
                 for (key, combo) in [
                     ("confirm_original", defaults.confirm_original),
                     ("confirm_translation", defaults.confirm_translation),
