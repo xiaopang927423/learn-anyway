@@ -95,6 +95,40 @@ pub(crate) fn run() {
             "confirmed complete input must close the window"
         )
     });
+    // Old sentence_confirmation=true must never turn numeric choices into a draft.
+    for digit in 1..=5usize {
+        for c in "shi".chars() {
+            event(&c.to_string(), 0, none);
+        }
+        let expected = host::with(|h| h.session.candidate(digit - 1).unwrap().text).unwrap();
+        let before = fixture.ivars().inserts.get();
+        event(&digit.to_string(), 18, none);
+        assert_eq!(&*fixture.ivars().committed.borrow(), &expected);
+        assert_eq!(fixture.ivars().inserts.get(), before + 1);
+        host::with(|h| {
+            assert!(!h.assistant.has_draft());
+            assert!(h.engine.composition().is_empty());
+        });
+    }
+    for c in "we".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    let before = fixture.ivars().inserts.get();
+    event("\t", 48, none);
+    assert_eq!(
+        fixture.ivars().inserts.get(),
+        before,
+        "Tab must not insert into app"
+    );
+    host::with(|h| assert!(h.assistant.has_draft()));
+    for c in "nihao".chars() {
+        event(&c.to_string(), 0, none);
+    }
+    let expected = host::with(|h| format!("we {}", h.session.candidate(0).unwrap().text)).unwrap();
+    event("1", 18, none);
+    assert_eq!(&*fixture.ivars().committed.borrow(), &expected);
+    assert_eq!(fixture.ivars().inserts.get(), before + 1);
+    host::with(|h| assert!(!h.assistant.has_draft()));
     fixture.ivars().inserts.set(0);
     for c in "nihaoma".chars() {
         event(&c.to_string(), 0, none);

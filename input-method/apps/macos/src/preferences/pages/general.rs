@@ -33,7 +33,6 @@ pub struct GeneralPage {
 
     /// 英文模式也给候选。
     english: Retained<NSButton>,
-    sentence_confirmation: Retained<NSButton>,
     learning: Retained<NSButton>,
 
     /// 终端 / 编辑器里不给英文候选。
@@ -150,13 +149,6 @@ impl GeneralPage {
             mtm,
             "只记确认上屏的选择；常用中文词条和英文词会保存在本机并参与后续排序。可在「常用词条」中手动添加或纠正输入码和内容。关闭后不新增学习。",
         );
-        let sentence_confirmation = checkbox(
-            mtm,
-            "高级：选字后暂存整句（默认关闭）",
-            Setting::SentenceConfirmation,
-            target,
-        );
-        row_checkbox(layout, &sentence_confirmation);
         note(
             layout,
             mtm,
@@ -165,7 +157,7 @@ impl GeneralPage {
         note(
             layout,
             mtm,
-            "Space 一次上屏当前选中候选（包含中英混输），Option+Space 采用整句英文；数字或鼠标可先转换草稿供继续翻译。翻译预览期间 Enter 不采用、不发送。",
+            "Space 一次上屏当前选中候选（包含中英混输），Option+Space 采用整句英文；数字 1–9 一次上屏对应候选；只有 Tab 进入草稿，草稿中点击可继续组句。翻译预览期间 Enter 不采用、不发送。",
         );
         let english_off_in_apps = checkbox(
             mtm,
@@ -211,7 +203,6 @@ impl GeneralPage {
             shuangpin_raw_preedit,
             traditional,
             english,
-            sentence_confirmation,
             learning,
             english_off_in_apps,
             chinese_first,
@@ -253,7 +244,6 @@ impl GeneralPage {
             .setEnabled(general.scheme().is_shuangpin());
         set_checked(&self.traditional, general.traditional);
         set_checked(&self.english, general.english_candidates);
-        set_checked(&self.sentence_confirmation, general.sentence_confirmation);
         set_checked(&self.learning, general.learning);
         set_checked(
             &self.english_off_in_apps,

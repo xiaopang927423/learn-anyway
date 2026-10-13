@@ -25,7 +25,7 @@ impl WordMateInputController {
                 && let Some(index) =
                     host::with(|h| h.session.index_on_page(digit as usize - 1)).flatten()
             {
-                return self.commit_index(index, client);
+                return self.commit_number(index, client);
             } else {
                 host::with(|h| {
                     super::draft::freeze_pending(h);
@@ -142,7 +142,7 @@ impl WordMateInputController {
         if composing && c == ' ' {
             let output = host::with(|h| {
                 let context = format!("{}{}", h.assistant.context, h.assistant.draft_text());
-                if h.sentence_confirmation || h.assistant.has_draft() {
+                if h.assistant.has_draft() || h.assistant.draft_cursor.is_some() {
                     let (candidate, keys, text) = h.engine.stage_english_space(&context)?;
                     h.assistant.stage_word(crate::wordmate::DraftWord {
                         candidate,
@@ -216,7 +216,7 @@ impl WordMateInputController {
                 && let Some(index) =
                     host::with(|h| h.session.index_on_page(offset as usize - 1)).flatten()
             {
-                return self.commit_index(index, client);
+                return self.commit_number(index, client);
             }
             if c.is_ascii_alphabetic()
                 || (composing && (c.is_ascii_digit() || matches!(c, '_' | '\'' | '-')))
@@ -315,7 +315,7 @@ impl WordMateInputController {
                 '1'..='9' => {
                     let offset = usize::from(*byte - b'1');
                     if let Some(index) = host::with(|h| h.session.index_on_page(offset)).flatten() {
-                        return self.commit_index(index, client);
+                        return self.commit_number(index, client);
                     }
                     // 这一页没有这一格（`gpt6` 只有三个候选）：数字当内容进缓冲区，成为英文直输段；
                     // 问字模式里数字不是问题的一部分，不算

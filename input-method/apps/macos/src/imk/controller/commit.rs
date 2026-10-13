@@ -37,6 +37,15 @@ impl WordMateInputController {
         self.commit_index(index, client);
     }
 
+    /// Numeric selection confirms immediately, including a draft explicitly opened with Tab.
+    pub(super) fn commit_number(&self, index: usize, client: TextClient<'_>) -> bool {
+        if !host::with(|h| h.session.candidate(index).is_some()).unwrap_or(false) {
+            return false;
+        }
+        host::with(|h| h.session.highlighted = index);
+        self.confirm_source(client)
+    }
+
     /// 上屏第 `index` 个候选；没有候选时上屏拼音本身。上屏后剩余拼音继续组句。
     pub(super) fn commit_index(&self, index: usize, client: TextClient<'_>) -> bool {
         let candidate = host::with(|h| h.session.candidate(index)).flatten();
@@ -44,7 +53,9 @@ impl WordMateInputController {
             if host::with(|h| index < h.session.layout.len()).unwrap_or(false) {
                 return true;
             }
-            if host::with(|h| h.sentence_confirmation || h.assistant.has_draft()).unwrap_or(false) {
+            if host::with(|h| h.assistant.has_draft() || h.assistant.draft_cursor.is_some())
+                .unwrap_or(false)
+            {
                 host::with(|h| {
                     let text = h.engine.composition().typed_text();
                     h.engine.clear();
@@ -68,13 +79,9 @@ impl WordMateInputController {
             }
             return self.commit_raw(client);
         };
-        let stage = host::with(|h| {
-            (h.sentence_confirmation
-                && candidate.kind != qingjian_core::CandidateKind::English
-                && !h.engine.english_mode())
-                || h.assistant.has_draft()
-        })
-        .unwrap_or(false);
+        // Only an explicitly opened Tab draft keeps mouse selections in composition.
+        let stage = host::with(|h| h.assistant.has_draft() || h.assistant.draft_cursor.is_some())
+            .unwrap_or(false);
         if stage {
             if host::with(|h| h.engine.composition().is_empty() && h.assistant.has_draft())
                 .unwrap_or(false)
