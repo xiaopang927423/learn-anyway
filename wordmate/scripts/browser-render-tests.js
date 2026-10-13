@@ -23,6 +23,7 @@ app.whenReady().then(async()=>{
   check(await run("!testRequests.some(r=>/Hidden|Private|Editable|apiKey/.test(r.text))"),'hidden text, forms, editable drafts and code excluded')
   check(await run("document.getElementById('link').getAttribute('href')==='https://example.com' && document.getElementById('sentence').firstChild.textContent==='Please '"),'original markup, text and links preserved')
   check(await run("document.getElementById('sentence').querySelector('[data-wordmate-translation]')!==null"),'bilingual pair stays in the same native paragraph')
+  check(await run("[...document.getElementById('sentence').querySelector('[data-wordmate-translation]').children].some(el=>el.textContent==='检查' && Number(getComputedStyle(el).fontWeight)>=600)"),'bilingual translation preserves emphasis styles')
   fs.mkdirSync(path.join(__dirname,'../test-artifacts'),{recursive:true})
   await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
   fs.writeFileSync(path.join(__dirname,'../test-artifacts/browser-bilingual.png'),(await win.webContents.capturePage()).toPNG())

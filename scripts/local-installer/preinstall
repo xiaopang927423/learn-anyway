@@ -1,0 +1,37 @@
+#!/bin/bash
+set -euo pipefail
+wm_user_home="$3"
+if [[ "$wm_user_home" == "/" || ! -d "$wm_user_home" ]]; then
+  wm_user_home=$(/usr/bin/python3 -c 'import os,pwd; print(pwd.getpwuid(os.stat("/dev/console").st_uid).pw_dir)')
+fi
+/usr/bin/python3 - "$wm_user_home" <<'PY'
+import pathlib,subprocess,signal,os,time,sys,datetime
+home=pathlib.Path(sys.argv[1])
+bundles=[home/'Applications/WordMate.app',pathlib.Path('/Applications/WordMate.app'),home/'Library/Input Methods/WordMateInput.app']
+if pathlib.Path('/Library/Input Methods/WordMateInput.app').exists():
+    raise SystemExit('System-wide WordMateInput exists; please resolve the installation location before installing this per-user package.')
+expected={'WordMate.app':'com.qiji.wordmate','WordMateInput.app':'com.qiji.wordmate.inputmethod'}
+import plistlib
+for bundle in bundles:
+    if bundle.exists() and plistlib.loads((bundle/'Contents/Info.plist').read_bytes()).get('CFBundleIdentifier')!=expected[bundle.name]:
+        raise SystemExit('Unexpected existing bundle identity; replacement canceled.')
+exe=[str(b/'Contents/MacOS'/('WordMateInput' if b.name=='WordMateInput.app' else 'WordMate')) for b in bundles]
+pids=[]
+for line in subprocess.check_output(['ps','-axo','pid=,command='],text=True).splitlines():
+    parts=line.strip().split(None,1)
+    if len(parts)==2 and any(parts[1]==e or parts[1].startswith(e+' ') for e in exe):
+        pid=int(parts[0]);os.kill(pid,signal.SIGTERM);pids.append(pid)
+for _ in range(50):
+    alive=[]
+    for pid in pids:
+        try:os.kill(pid,0);alive.append(pid)
+        except ProcessLookupError:pass
+    if not alive:break
+    pids=alive;time.sleep(.1)
+else:raise SystemExit('WordMate is still running; replacement canceled.')
+backup=home/'Library/Application Support/WordMate/local-installer-backups'/datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+for index,bundle in enumerate(bundles):
+    if bundle.exists():
+        backup.mkdir(parents=True,exist_ok=True);os.chmod(backup,0o700)
+        subprocess.run(['/usr/bin/ditto','-c','-k','--keepParent',str(bundle),str(backup/f'{index}-{bundle.name}.zip')],check=True)
+PY

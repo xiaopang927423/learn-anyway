@@ -2,11 +2,15 @@ const $ = id => document.getElementById(id)
 async function pageCommand(command) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   if (!tab?.id) throw new Error('请先打开一个网页')
+  if ((command === 'pdf' || command === 'page' && /\.pdf(?:[?#]|$)/i.test(tab.url || '')) && /^https?:\/\//i.test(tab.url || '')) {
+    const origins = [new URL(tab.url).origin + '/*']
+    if (!await chrome.permissions.contains({ origins }) && !await chrome.permissions.request({ origins })) throw new Error('需要当前 PDF 站点的读取权限，才能在当前标签页显示双语。')
+  }
   const response = await chrome.runtime.sendMessage({ type: 'command', command, tabId: tab.id, target: $('target').value, readingMode: $('readingMode').value })
   if (!response?.ok) throw new Error(response?.error || '无法打开网页翻译')
   return response
 }
-for (const command of ['activate','page','selection','cancel','restore']) {
+for (const command of ['activate','page','pdf','selection','cancel','restore']) {
   $(command).onclick = async event => {
     event.target.disabled = true; $('status').textContent = ''
     try { await pageCommand(command); window.close() }

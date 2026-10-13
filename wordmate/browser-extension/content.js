@@ -94,22 +94,27 @@
         if (phonetic) body.append(element('p', phonetic, 'muted'))
         for (const definition of result.definitions || []) body.append(element('p', `${definition.pos || ''} ${definition.meaning || ''}`, 'meaning'))
         copy = (result.definitions || []).map(d => `${d.pos || ''} ${d.meaning || ''}`).join('\n')
-        const notebookButton = button(result.inNotebook ? '✓ 已收录' : '加入生词本', async event => {
+
+      } else body.append(element('p', result.translation, 'translation'))
+      const notebookWord = result.notebookWord || (result.type === 'word' ? result.word : '')
+      if (notebookWord) {
+        const entryBody = body
+        const notebookButton = button(result.inNotebook ? `✓ ${notebookWord} 已收录` : `加入生词本：${notebookWord}`, async event => {
           const control = event.currentTarget
           control.disabled = true
           try {
             const saved = await translate(text, 'add-word', 'zh', selected?.context || '')
-            result.inNotebook = saved.inNotebook
-            control.textContent = '✓ 已收录'
-          } catch (error) {
-            control.disabled = false
-            body.append(element('p', error.message, 'error'))
-          }
+            if (saved.inNotebook !== true) throw new Error('尚未确认写入生词本，请重试')
+            result.inNotebook = true
+            result.notebookError = ''
+            entryBody.querySelector('[data-notebook-error]')?.remove()
+            control.textContent = `✓ ${saved.notebookWord || notebookWord} 已收录`
+          } catch (error) { control.disabled = false; const notice = element('p', error.message, 'error'); notice.dataset.notebookError = 'true'; entryBody.querySelector('[data-notebook-error]')?.remove(); entryBody.append(notice) }
         })
-        notebookButton.dataset.action = 'add-word'
-        notebookButton.disabled = result.inNotebook === true
-        body.append(notebookButton)
-      } else body.append(element('p', result.translation, 'translation'))
+        notebookButton.dataset.action = 'add-word'; notebookButton.disabled = result.inNotebook === true
+        entryBody.append(notebookButton)
+        if (result.notebookError) { const notice = element('p', result.notebookError, 'error'); notice.dataset.notebookError = 'true'; entryBody.append(notice) }
+      }
       for (const example of (result.examples || []).slice(0,2)) body.append(element('p', `${example.en || ''}\n${example.zh || ''}`, 'muted'))
       if (result.notes) body.append(element('p', result.notes, 'muted'))
       toolbar.prepend(button('复制译文', async event => {
@@ -289,7 +294,17 @@
   }
   function insertEntry(group, translated, target) {
     if (entries.has(group.block)) return
-    const output = element('span', translated.translation)
+    const output = element('span')
+    // 仅重建文字样式，不复制 id、事件、表单或网页 HTML。
+    for (const source of translated.sources) {
+      const fragment = element('span', source.translated)
+      const computed = getComputedStyle(source.node.parentElement)
+      for (const property of ['font-weight', 'font-style', 'text-decoration-line', 'vertical-align', 'white-space']) {
+        fragment.style.setProperty(property, computed.getPropertyValue(property))
+      }
+      if (source.node.parentElement.closest('a')) fragment.dataset.wordmateLinkText = 'true'
+      output.append(fragment)
+    }
     output.dataset.wordmateTranslation = 'true'; output.lang = target === 'en' ? 'en' : 'zh-CN'
     output.style.cssText = 'display:block!important;color:inherit!important;background:transparent!important;opacity:1!important;font:inherit!important;line-height:1.7!important;text-align:inherit!important;padding:6px 0 0!important;margin:6px 0 0!important;border:0!important;border-top:1px solid color-mix(in srgb,currentColor 14%,transparent)!important;white-space:normal!important;overflow-wrap:anywhere!important;letter-spacing:normal!important;'
     if (/^H[1-6]$/.test(group.block.tagName)) output.style.setProperty('font-size', '0.88em', 'important')

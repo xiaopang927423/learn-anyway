@@ -1,6 +1,6 @@
 {
   "name": "wordmate",
-  "version": "0.4.5",
+  "version": "0.6.0",
   "description": "WordMate —— 工作场景 AI 生词助手（菜单栏查词 + 生词本 + 间隔重复复习）",
   "main": "main.js",
   "scripts": {
@@ -8,15 +8,17 @@
     "start": "electron .",
     "smoke": "WM_SMOKE=1 electron .",
     "build:native": "electron-rebuild -f -w wordmate-services",
-    "dist": "npm run build:native && electron-builder --mac dir",
+    "dist": "npm run build:extension && npm run build:native && electron-builder --mac dir",
     "test": "node --test test/*.test.js",
     "test:integration": "node_modules/.bin/electron scripts/integration-tests.js",
     "test:browser": "node_modules/.bin/electron scripts/browser-render-tests.js",
     "lint": "node scripts/check-project.js",
     "install:mac": "node scripts/install-mac.js",
-    "test:host": "python3 scripts/browser-host-tests.py"
+    "test:host": "python3 scripts/browser-host-tests.py",
+    "build:extension": "node scripts/build-extension.js",
+    "test:pdf": "node_modules/.bin/electron scripts/pdf-reader-tests.js"
   },
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",
     "electron": "^44.2.0",
@@ -24,6 +26,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
+    "pdfjs-dist": "5.4.624",
     "wordmate-services": "file:./native"
   },
   "build": {
@@ -38,7 +41,8 @@
       "preload.js",
       "src/**/*",
       "renderer/**/*",
-      "assets/**/*"
+      "assets/**/*",
+      "LICENSE"
     ],
     "mac": {
       "target": "dir",

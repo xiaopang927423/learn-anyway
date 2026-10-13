@@ -19,3 +19,4 @@ models.json
 input-method/target/
 input-method/resources/
 input-method/bundle/
+wordmate/browser-extension/vendor/

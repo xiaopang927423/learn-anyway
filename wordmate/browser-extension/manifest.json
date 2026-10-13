@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "WordMate 网页翻译",
-  "version": "0.4.5",
-  "description": "整页双语翻译、选词和段落翻译，结果直接显示在网页中。",
+  "version": "0.6.0",
+  "description": "网页原位双语翻译、保留文字样式、PDF 双语阅读与划词学习。",
   "permissions": [
     "contextMenus",
     "nativeMessaging",
@@ -16,5 +16,12 @@
   "action": {
     "default_popup": "popup.html",
     "default_title": "WordMate 网页翻译"
+  },
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   }
 }

@@ -1,0 +1,27 @@
+#!/bin/bash
+set -euo pipefail
+wm_user_home="$3"
+if [[ "$wm_user_home" == "/" || ! -d "$wm_user_home" ]]; then
+  wm_user_home=$(/usr/bin/python3 -c 'import os,pwd; print(pwd.getpwuid(os.stat("/dev/console").st_uid).pw_dir)')
+fi
+wm_desktop="$wm_user_home/Applications/WordMate.app"
+wm_ime="$wm_user_home/Library/Input Methods/WordMateInput.app"
+# Synchronize the prior system copy so an existing login item cannot reopen an old backend.
+if [[ -d "/Applications/WordMate.app" && -w "/Applications/WordMate.app" ]]; then
+  /usr/bin/ditto "$wm_desktop" "/Applications/WordMate.app"
+  wm_desktop="/Applications/WordMate.app"
+fi
+wm_lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+"$wm_lsregister" -f "$wm_desktop"
+/usr/bin/codesign --verify --strict "$wm_ime"
+"$wm_lsregister" -f "$wm_ime"
+# Native Messaging installation is optional; it does not block desktop or keyboard installation.
+/usr/bin/python3 "$wm_desktop/Contents/Resources/scripts/install-browser-host.py" || echo 'Browser connector setup pending; desktop and input method files installed.'
+/usr/bin/open -g "$wm_desktop" --args --ime-background
+wm_exe="$wm_ime/Contents/MacOS/WordMateInput"
+"$wm_exe" --register || echo 'Input source activation pending; add WordMate in System Settings > Keyboard > Input Sources.'
+wm_state="$wm_user_home/Library/Application Support/WordMateInput"
+/bin/mkdir -p "$wm_state"
+"$wm_exe" --registration-status > "$wm_state/install-state.json"
+/bin/chmod 600 "$wm_state/install-state.json"
+echo 'WordMate desktop and input method installation complete. See the bundled installation guide.'
