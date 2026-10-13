@@ -138,6 +138,13 @@ app.whenReady().then(async()=>{
   check(await run("document.getElementById('snippet').firstChild.firstChild.textContent.startsWith('我们') && document.getElementById('table-value').firstChild.textContent==='新加坡' && document.getElementById('result-title').closest('a').getAttribute('href')==='https://example.com'"),'Chinese-only search reading covers snippets and facts while preserving links')
   await run("window.listener({command:'mode',readingMode:'bilingual'},null,()=>{});new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))")
   fs.writeFileSync(path.join(__dirname,'../test-artifacts/browser-search-boundaries.png'),(await win.webContents.capturePage()).toPNG())
+  await run(`window.listener({command:'restore'},null,()=>{});document.body.innerHTML='<h2 id="styled-heading">Reading a technical report</h2><p id="styled-prose">An <em>important</em> and <u>underlined</u> point with a note<sup>reference</sup>.</p><ul><li id="styled-list">A list keeps its marker.</li></ul><table><tr><th id="styled-th">Item name</th><td id="styled-td">Delivery schedule</td></tr></table>';window.listener({command:'page',target:'zh',readingMode:'bilingual'},null,()=>{});true`)
+  await until("document.querySelectorAll('[data-wordmate-translation]').length===5")
+  check(await run("[...document.getElementById('styled-prose').querySelector('[data-wordmate-translation]').children].some(el=>getComputedStyle(el).fontStyle==='italic') && [...document.getElementById('styled-prose').querySelector('[data-wordmate-translation]').children].some(el=>getComputedStyle(el).textDecorationLine.includes('underline'))"),'bilingual prose preserves italic and underline while remaining grouped')
+  check(await run("[...document.getElementById('styled-prose').querySelector('[data-wordmate-translation]').children].some(el=>getComputedStyle(el).verticalAlign==='super')"),'superscript fragments remain associated with their original paragraph')
+  check(await run("document.querySelectorAll('li').length===1 && document.querySelectorAll('td').length===1 && document.querySelectorAll('th').length===1 && document.getElementById('styled-heading').querySelector('[data-wordmate-translation]')!==null"),'headings, list markers and table cells retain their native structure')
+  await run("window.listener({command:'restore'},null,()=>{});true")
+  check(await run("document.querySelectorAll('[data-wordmate-translation]').length===0 && document.querySelector('em').textContent==='important' && document.querySelector('sup').textContent==='reference'"),'restoring mixed-style content removes translations without changing original markup')
   console.log('BROWSER_RENDER_OK checks='+checks);app.exit(0)
  }catch(error){console.error(error.stack);app.exit(1)}
 })

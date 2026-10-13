@@ -8,6 +8,8 @@
 
 PDF 使用随扩展打包的 PDF.js 5.4.624，Apache-2.0。锁定 npm 依赖，build-extension.js 从 node_modules 生成被 Git 忽略的 vendor；安装包携带运行脚本、worker、字体、CMap、WASM、ICC 与 LICENSE。不通过 CDN 加载代码。扩展 CSP 仅允许本地脚本及 PDF.js 所需 WASM；PDF.js 关闭 isEvalSupported。
 
+PDF 翻译通过 chrome.tabs.update 接管当前标签，而不是 tabs.create 打开新标签。popup/右键手势在导航前按站点申请读取权限；source、target、mode、autoload 参数传递到 pdf-reader.html，自动加载并翻译，文件选择区默认隐藏。权限或下载失败时展开备用打开入口；“返回原 PDF”回到原网络地址。popup 命令在 PDF 对照页面直接消息路由，不注入普通网页 content.js。
+
 pdf-reader.html 是扩展自身页面，左侧 canvas + TextLayer，右侧安全文本段落。pdf-model.mjs 在 scale=1 的 viewport 中重建行、合并断行/断词，用启发式识别双栏，并保留每行坐标。点击段落按当前缩放高亮原页，对应定位右侧文本。canvas 保持原版视觉，译文不写入 PDF。
 
 ## 数据与权限
@@ -22,7 +24,7 @@ PDF 正文沿用 translate-text → Native Messaging → browser-bridge 的 page
 
 ## 取舍
 
-不依赖浏览器内置 PDF 查看器的可注入性。阅读器入口适配本地文件与网络地址；暂不自动下载所有 PDF。与原版覆盖相比，对照阅读避免译文长度导致版面溢出。与 OCR 相比，优先文字层解析，无文字层页面明确提示。本版不保证所有复杂表格/旋转/脚注语义顺序，也不支持 PDF 链接注释交互、密码输入或导出。
+不依赖浏览器内置 PDF 查看器的可注入性。阅读器入口适配本地文件与网络地址；只在用户点击翻译后自动读取当前 PDF，不监听下载或自动接管所有 PDF。与原版覆盖相比，对照阅读避免译文长度导致版面溢出。与 OCR 相比，优先文字层解析，无文字层页面明确提示。本版不保证所有复杂表格/旋转/脚注语义顺序，也不支持 PDF 链接注释交互、密码输入或导出。
 
 ## 验证
 

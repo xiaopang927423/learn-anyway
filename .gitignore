@@ -19,4 +19,6 @@ models.json
 input-method/target/
 input-method/resources/
 input-method/bundle/
+.workbuddy-ai/
+input-method/.workbuddy-ai/
 wordmate/browser-extension/vendor/

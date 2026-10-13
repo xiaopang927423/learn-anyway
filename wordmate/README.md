@@ -232,4 +232,4 @@ renderer/          桌面界面（原生 HTML/CSS/JS，无框架）
 
 ## v0.6.0 网页与 PDF
 
-构建扩展运行 `npm ci` 后 `npm run build:extension`，再加载 browser-extension 文件夹。`npm run dist` 会自动打包 PDF.js 本地资源。更新扩展后在 Chrome/Edge 扩展页重新加载。插件新增 PDF 双语阅读器，支持本地文件或网络地址、当前页翻译、段落定位和划词入本；网络读取按站点申请权限。扫描件 OCR 不属于本版。运行 `npm run test:pdf` 可执行 PDF 真解析/模拟模型回归。详见 [安装说明](../docs/测试目录/本地安装包使用说明.md)。
+构建扩展运行 `npm ci` 后 `npm run build:extension`，再加载 browser-extension 文件夹。`npm run dist` 会自动打包 PDF.js 本地资源。更新扩展后在 Chrome/Edge 扩展页重新加载。在正在阅读的网络 PDF 点击“翻译页面内容”或“当前 PDF 双语对照”，在同一标签自动显示原版与译文，不需新开页面或再次打开文件。支持段落定位和划词入本；网络读取按站点申请权限，本地文件用备用文件入口。扫描件 OCR 不属于本版。运行 `npm run test:pdf` 可执行 PDF 真解析/模拟模型回归。详见 [安装说明](../docs/测试目录/本地安装包使用说明.md)。
