@@ -4,14 +4,24 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="WordMate：中英文输入、实时云候选、常用词记忆与网页翻译。macOS 英语学习工具。">
 <meta name="theme-color" content="#f6f5f0"><title>WordMate · 边输入，边学习</title>
-<link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="tour.css"><script defer src="app.js"></script><script defer src="tour.js"></script>
+<link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="tour.css"><script defer src="app.js"></script><script defer src="tour.js"></script><link rel="stylesheet" href="scene.css"><script defer src="scene.js"></script>
 </head>
 <body>
 <header class="nav wrap"><a class="brand" href="#"><span class="mark" aria-hidden="true">W</span><span>WordMate<small>LEARN ANYWAY</small></span></a><nav aria-label="Main navigation"><a href="#how" data-i18n="navHow">如何使用</a><a href="#install" data-i18n="navInstall">安装</a><a href="https://github.com/xiaopang927423/learn-anyway" target="_blank" rel="noopener">GitHub ↗</a><button id="language" aria-label="Switch language">English</button></nav></header>
 <main>
 <section class="hero wrap">
 <div class="hero-copy"><p class="eyebrow"><span class="dot"></span><span data-i18n="eyebrow">macOS · 0.6.0</span></p><h1 data-i18n="heroTitle">读懂，写出，<br>真正记住。</h1><p class="lead" data-i18n="heroLead">用中英输入法写出想说的话，用翻译插件读懂网页，把遇见的生词留下来，再通过复习和默写真正记住。</p><div class="actions"><a class="button primary" href="#install" data-i18n="getStarted">开始使用 <span>↗</span></a><a class="text-link" href="#how" data-i18n="seeDemo">播放产品演示 ↓</a></div><p class="small muted" data-i18n="heroFoot">Apple Silicon · macOS 13+ · GPL-3.0</p></div>
-<div class="hero-visual"><div class="window"><div class="window-bar"><div class="traffic"><i></i><i></i><i></i></div><span data-i18n="windowTitle">写下你想说的话</span><span class="mode-badge" id="modeBadge">中 / EN</span></div><div class="compose" id="compose">I want to eat <span>早餐</span><b class="caret"></b></div><div class="candidate"><div class="candidate-label"><span class="cloud">✧</span><span data-i18n="candidateLabel">可选译文</span><span class="key">⌥ Space</span></div><p id="candidateText">I want to eat breakfast</p><small id="candidateMeaning">早餐 → breakfast</small></div><div class="window-footer"><span data-i18n="confirmHint">由你确认，才会输入</span><span>✓</span></div></div><div class="saved"><span class="saved-icon">✓</span><div><b data-i18n="savedTitle">一个新词，一次练习。</b><span data-i18n="savedBody">确认采用后，可记入个人词库。</span></div></div><div class="visual-note" data-i18n="illustration">交互示意 · 不是实时模型结果</div></div>
+<div class="hero-visual scenario" id="heroScene">
+<div class="scene-head"><span class="scene-dot"></span><span id="sceneContext">使用场景 / 和同事约早餐</span><span class="scene-counter" id="sceneCounter">01 / 06</span></div>
+<div class="chat-app"><div class="chat-top"><span class="chat-avatar">A</span><div><b>Alex</b><small id="sceneStatus">工作聊天</small></div><span class="chat-more">···</span></div>
+<div class="chat-body"><span class="chat-time">09:41</span><div class="chat-received" id="sceneMessage">Breakfast before the meeting?</div><div class="scene-hint" id="sceneHint">想回复英文，但暂时想不起“早餐”。</div></div>
+<div class="chat-input"><div class="chat-draft" id="sceneDraft"><span class="scene-caret"></span></div><div class="chat-tools"><span>＋ &nbsp; ☺</span><span class="scene-mode" id="sceneMode">英</span><span class="send-icon" aria-label="Send button (illustration)">↑</span></div></div>
+<div class="ime-scene" id="sceneIME" hidden><div class="ime-preedit" id="scenePreedit"></div><div class="ime-selected"><span>1</span><div><b id="sceneCandidate"></b><small id="sceneTranslation"></small></div></div><div class="ime-other" id="sceneOther"></div><div class="ime-shortcuts" id="sceneShortcuts">Space 上屏 · ⌥Space 英文 · Tab 草稿空格</div></div>
+</div>
+<div class="scene-action"><kbd id="sceneKey">英文键盘</kbd><p id="sceneCaption"></p></div>
+<div class="scene-controls"><button id="scenePlay" type="button">暂停</button><div class="scene-progress" id="sceneSteps" aria-label="Scenario steps"></div><button id="sceneReplay" type="button">重播 ↺</button></div>
+<p class="scene-disclosure" id="sceneDisclosure">聊天输入场景动画 · 确认后上屏，不自动发送</p>
+</div>
 </section>
 <div class="ribbon"><div class="wrap"><span data-i18n="ribbon1">从输入到表达</span><span data-i18n="ribbon2">本地词库 + 可选云联想</span><span data-i18n="ribbon3">中英文常用词记忆</span></div></div>
 <section id="how" class="tour-section section wrap">
