@@ -16,7 +16,7 @@ WordMate 把中英输入法、网页翻译插件和生词本放在同一套学�
 
 ## 安装与打包
 
-当前 macOS arm64 安装包：`dist/WordMate-0.6.0-macOS-arm64.pkg`，包含桌面应用、输入法和浏览器扩展文件。适用于 Apple Silicon macOS 13+，Python3 需可用。扩展需手动加载；学习数据、配置与用户词条不随包分发。
+当前 macOS arm64 安装包：`dist/WordMate-0.6.1-macOS-arm64.pkg`，包含桌面应用、输入法和浏览器扩展文件。适用于 Apple Silicon macOS 13+，Python3 需可用。扩展需手动加载；学习数据、配置与用户词条不随包分发。
 
 ```sh
 npm --prefix wordmate ci

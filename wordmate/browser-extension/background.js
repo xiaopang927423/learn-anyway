@@ -18,7 +18,6 @@ function nativeTranslate(message) {
   })
 }
 async function command(tabId, name, text = '', target = 'zh', frameId = 0, readingMode) {
-  if (name === 'pdf') return openPdfReader(tabId, target, readingMode)
   if (chrome.tabs.get) {
     const tab = await chrome.tabs.get(tabId)
     if (tab.url?.startsWith(chrome.runtime.getURL('pdf-reader.html'))) {
@@ -26,6 +25,7 @@ async function command(tabId, name, text = '', target = 'zh', frameId = 0, readi
     }
     if (name === 'page' && /\.pdf(?:[?#]|$)/i.test(tab.url || '')) return openPdfReader(tabId, target, readingMode)
   }
+  if (name === 'pdf') return openPdfReader(tabId, target, readingMode)
   await chrome.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, files: ['content.js'] })
   return chrome.tabs.sendMessage(tabId, { command: name, text, target, readingMode }, { frameId })
 }
@@ -80,7 +80,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   }
   if (message?.type === 'command' && !sender.tab) {
     command(message.tabId, message.command, '', message.target || 'zh', 0, message.readingMode)
-      .then(result => respond(result), error => respond({ ok: false, error: '该页面不能直接翻译；PDF 请使用“PDF 双语阅读器”，本地文件可在阅读器中打开。' }))
+      .then(result => respond(result), error => respond({ ok: false, error: '该页面不能直接翻译；网络 PDF 请使用“当前 PDF 双语对照”，本地文件可通过更换文件入口打开。' }))
     return true
   }
   return false

@@ -1,6 +1,6 @@
 # ADR-010：PDF 专用阅读器与网页样式翻译
 
-2026-10-13，v0.6.0。本地实验版。
+2026-10-14，v0.6.1。本地实验版。
 
 ## 决策
 
@@ -28,4 +28,4 @@ PDF 正文沿用 translate-text → Native Messaging → browser-bridge 的 page
 
 ## 验证
 
-[测试记录](../测试目录/v0.6.0-网页与PDF回归.md)分别记录模拟接口、真实 PDF/Chromium、真实模型、实际 Chrome 操作。PDF.js 运行包生成产物不进入 Git，依赖锁和构建脚本进入 Git。
+[测试记录](../测试目录/v0.6.1-网页与PDF回归.md)分别记录模拟接口、真实 PDF/Chromium、真实模型、实际 Chrome 操作。PDF.js 运行包生成产物不进入 Git，依赖锁和构建脚本进入 Git。

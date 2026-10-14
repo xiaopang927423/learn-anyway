@@ -72,3 +72,8 @@ test('page translation on a PDF takes over the same tab and carries target/mode'
  assert.equal(s.commands[0].updated,7);const url=new URL(s.commands[0].opened)
  assert.equal(url.searchParams.get('source'),'https://example.com/paper.pdf');assert.equal(url.searchParams.get('autoload'),'1')
 })
+test('PDF command inside the current reader keeps the document instead of reopening an empty view',async()=>{
+ const s=setup(false,'chrome-extension://test-extension/pdf-reader.html?source=https%3A%2F%2Fexample.com%2Fa.pdf')
+ const result=await new Promise(resolve=>s.events.message({type:'command',command:'pdf',tabId:7},{},resolve))
+ assert.equal(result.ok,true);assert.equal(s.commands.length,1);assert.equal(s.commands[0].message.command,'pdf');assert.equal(s.commands[0].opened,undefined)
+})
