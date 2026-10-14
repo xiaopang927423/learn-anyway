@@ -28,10 +28,7 @@ app.whenReady().then(async()=>{
  await win.webContents.executeJavaScript('document.getElementById("language").click()')
  assert.equal(await win.webContents.executeJavaScript('document.documentElement.lang'),'en')
  assert.ok((await win.webContents.executeJavaScript('document.getElementById("sceneCaption").textContent')).includes('English translation'))
- await win.webContents.executeJavaScript('document.getElementById("sceneReplay").click()')
- assert.equal(await win.webContents.executeJavaScript('WordMateScene.getState().playing'),true)
- await win.webContents.executeJavaScript('document.getElementById("scenePlay").click()')
- assert.equal(await win.webContents.executeJavaScript('WordMateScene.getState().playing'),false)
+ assert.equal(await win.webContents.executeJavaScript('document.querySelectorAll(".scene-controls,.scene-disclosure").length'),0)
 
  assert.ok((await win.webContents.executeJavaScript('document.querySelector("h1").textContent')).includes('Read. Write.'))
  await win.webContents.executeJavaScript("document.querySelector('[data-demo=chinese]').click()")
