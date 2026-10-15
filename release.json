@@ -1,0 +1,9 @@
+{
+  "version": "0.6.1",
+  "components": {
+    "desktop": "0.6.1",
+    "extension": "0.6.1",
+    "inputMethod": "0.6.0"
+  },
+  "inputMethodBuild": "6001"
+}

@@ -5,14 +5,15 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 p=argparse.ArgumentParser()
 p.add_argument('--output',type=pathlib.Path,default=ROOT/'dist')
 a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
-release_version=json.loads((ROOT/'wordmate/package.json').read_text())['version']
+subprocess.run(['python3',str(ROOT/'scripts/versions.py')],check=True)
+release=json.loads((ROOT/'release.json').read_text());release_version=release['version']
 desktop=ROOT/'wordmate/dist/mac-arm64/WordMate.app'
 ime=ROOT/'input-method/bundle/WordMateInput.app'
 for app,identity in [(desktop,'com.qiji.wordmate'),(ime,'com.qiji.wordmate.inputmethod')]:
     if not app.is_dir():raise SystemExit('Build first: '+str(app))
     info=plistlib.loads((app/'Contents/Info.plist').read_bytes())
     if info.get('CFBundleIdentifier')!=identity:raise SystemExit('Unexpected bundle identity')
-if plistlib.loads((ime/'Contents/Info.plist').read_bytes())['CFBundleShortVersionString']!='0.6.0':raise SystemExit('Stale IME build')
+if plistlib.loads((ime/'Contents/Info.plist').read_bytes())['CFBundleShortVersionString']!=release['components']['inputMethod']:raise SystemExit('Stale IME build')
 if plistlib.loads((desktop/'Contents/Info.plist').read_bytes())['CFBundleShortVersionString']!=release_version:raise SystemExit('Stale desktop build')
 subprocess.run(['/usr/bin/codesign','--verify','--strict',str(ime)],check=True)
 # Inspect the exact packaged backend, not just its version label.
@@ -25,6 +26,7 @@ with tempfile.TemporaryDirectory(prefix='wordmate-local-product-') as directory:
     guide=payload/'Applications/WordMate-使用说明';guide.mkdir()
     shutil.copy2(ROOT/'docs/测试目录/本地安装包使用说明.md',guide/'安装与使用.md')
     shutil.copy2(ROOT/'LICENSE',guide/'LICENSE')
+    shutil.copy2(ROOT/'release.json',guide/'release.json')
     shutil.copy2(ROOT/'THIRD_PARTY_NOTICES.md',guide/'第三方许可.md')
     # Extension files are already inside desktop Resources; expose a convenient stable folder.
     extension=desktop/'Contents/Resources/browser-extension'
@@ -54,6 +56,10 @@ with tempfile.TemporaryDirectory(prefix='wordmate-local-product-') as directory:
     package=out/f'WordMate-{release_version}-macOS-arm64.pkg'
     subprocess.run(['productbuild','--distribution',str(distribution),'--resources',str(work),'--package-path',str(work),str(package)],check=True)
 sha=hashlib.sha256(package.read_bytes()).hexdigest()
+source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+source_dirty=bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],cwd=ROOT,text=True).strip())
+(out/(package.name+'.release.json')).write_text(json.dumps({'version':release_version,'components':release['components'],'sourceCommit':source_commit,'sourceDirty':source_dirty,'file':package.name,'bytes':package.stat().st_size,'sha256':sha},ensure_ascii=False,indent=2)+'\n')
+shutil.copy2(out/(package.name+'.release.json'),out/'current-release.json')
 (out/(package.name+'.sha256')).write_text(sha+'  '+package.name+'\n')
 shutil.copy2(ROOT/'docs/测试目录/本地安装包使用说明.md',out/'WordMate-安装说明.md')
 print(json.dumps({'package':str(package),'bytes':package.stat().st_size,'sha256':sha},ensure_ascii=False))
