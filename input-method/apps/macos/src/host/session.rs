@@ -19,7 +19,7 @@ pub struct Session {
     /// 当前页。
     pub page: usize,
 
-    /// 这轮查询里用户用方向键 / 翻页键动过高亮。动过就不再拿重排结果换掉候选。
+    /// 这轮查询里用户按过方向键 / 翻页键（含边界）。开始选词后不再异步换候选。
     pub navigated: bool,
 
     /// 候选窗口顶部显示的拼音行（分段 + 光标）。
@@ -50,6 +50,7 @@ impl Session {
 
     /// 矩阵里竖着移 `delta` 行；还是单行就先从当前页展开（展开本身也算变化）。返回要不要重画。
     pub fn move_rows(&mut self, delta: isize) -> bool {
+        self.note_navigation(delta);
         let expanding = self.grid.is_none();
         let mut grid = self
             .grid
@@ -69,6 +70,7 @@ impl Session {
         let Some(mut grid) = self.grid else {
             return false;
         };
+        self.note_navigation(delta);
         let moved = grid.move_cells(&self.layout, self.highlighted, delta);
         self.grid = Some(grid);
         self.land(moved)
@@ -121,6 +123,7 @@ impl Session {
 
     /// 高亮上下移动，越过页边自动翻页。返回是否有变化。
     pub fn move_highlight(&mut self, delta: isize) -> bool {
+        self.note_navigation(delta);
         let len = self.layout.len();
         if len == 0 {
             return false;
@@ -145,6 +148,7 @@ impl Session {
 
     /// 翻页并选中新页第一个真实候选，跳过没有候选的页。
     pub fn turn_page(&mut self, delta: isize) -> bool {
+        self.note_navigation(delta);
         let pages = self.layout.pages().max(1);
         let current = self.page as isize;
         let mut next = (current + delta).clamp(0, pages as isize - 1) as usize;
@@ -172,6 +176,14 @@ impl Session {
 
     pub fn pages(&self) -> usize {
         self.layout.pages()
+    }
+
+    // A navigation key means the user is inspecting this list, even at its edge.
+    // Keep asynchronous results from changing numbers or collapsing an open grid.
+    fn note_navigation(&mut self, delta: isize) {
+        if delta != 0 && !self.layout.is_empty() {
+            self.navigated = true;
+        }
     }
 }
 
@@ -227,6 +239,7 @@ mod tests {
         assert!(session.grid.is_none());
         // 只有一行时往上：展开但不动，仍要重画
         assert!(session.move_rows(-1));
+        assert!(session.navigated);
         let (cells, _) = session.grid_cells().unwrap();
         assert_eq!(cells.len(), 5);
     }
@@ -259,16 +272,23 @@ mod tests {
         let mut session = Session::default();
         session.reset(None, candidates(12), 9, 2);
         assert!(!session.navigated);
-        // 顶到边界没动算没导航
+        // 顶到边界也表示用户已经开始选词，异步结果不能再改编号。
         assert!(!session.move_highlight(-1));
-        assert!(!session.navigated);
+        assert!(session.navigated);
+        session.reset(None, Vec::new(), 9, 2);
+        assert!(!session.turn_page(1));
+        assert!(
+            !session.navigated,
+            "an empty question must still accept its first answer"
+        );
+        session.reset(None, candidates(12), 9, 2);
         assert!(session.move_highlight(1));
         assert!(session.navigated);
         session.reset(None, candidates(3), 9, 2);
         assert!(!session.navigated);
-        // 只有一页时翻页没动，也不算导航
+        // 只有一页时翻页不动，但同样锁定当前列表。
         assert!(!session.turn_page(1));
-        assert!(!session.navigated);
+        assert!(session.navigated);
         session.reset(None, candidates(12), 9, 2);
         assert!(session.turn_page(1));
         assert!(session.navigated);

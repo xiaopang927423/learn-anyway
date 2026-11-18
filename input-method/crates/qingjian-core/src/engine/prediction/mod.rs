@@ -374,6 +374,7 @@ impl Engine {
             erased: 0,
             log_id,
             phrase: None,
+            reading_choices: Vec::new(),
         };
         self.remember_commit(commit);
         traditional_text
@@ -383,11 +384,20 @@ impl Engine {
     /// 还会把整句候选里正确的同文本词顶掉；用户敲的拼音能切成与字数相同的完整音节、每个又是对应字的读音时以敲的为准，
     /// 否则仍用模型的，但模型的读音里有词库不认「这个字读这个音」的就不学。
     pub(super) fn learned_syllables(&self, candidate: &Candidate) -> Option<Vec<String>> {
+        self.learned_syllables_for(candidate, self.composition.scope())
+    }
+
+    /// Staged selections retain their own keys after the composition has been drained.
+    /// Apply the same reading validation as a direct cloud-word commit.
+    pub(super) fn learned_syllables_for(
+        &self,
+        candidate: &Candidate,
+        keys: &str,
+    ) -> Option<Vec<String>> {
         let chars: Vec<String> = candidate.text.chars().map(String::from).collect();
-        let decoded = self.decode(self.composition.scope());
-        let typed = decoded
-            .as_ref()
-            .map_or(self.composition.scope(), |d| d.pinyin());
+        let keys = keys.to_ascii_lowercase();
+        let decoded = self.decode(&keys);
+        let typed = decoded.as_ref().map_or(keys.as_str(), |d| d.pinyin());
         if let Ok((segmentations, "")) = segment_longest_prefix(typed)
             && let Some(best) = segmentations.first()
             && best.syllables.len() == chars.len()

@@ -496,6 +496,14 @@ impl WordMateInputController {
         if command || control {
             return false;
         }
+        // Some IMK clients omit characters for physical digit keys, just as for
+        // Space. Route them through text handling so expression modes still work.
+        if pressed.is_empty()
+            && event.characters().is_none_or(|text| text.is_empty())
+            && let Some(digit) = digit_key(key)
+        {
+            return self.handle_text(&digit.to_string(), client);
+        }
         // Space is a physical word boundary. Some IMK clients report an empty
         // characters string for it; still route it through the mixed-input policy.
         if key == 49 && !option {

@@ -144,23 +144,34 @@ impl Engine {
         // `ba` 在「做了」后面出 吧、句首出 把
         let log_total = (self.total_frequency() as f64).max(1.0).ln();
         let letters = choice_key(scope, scope.len());
-        ranking::rank(&mut scored, MAX_CANDIDATES, |item| {
-            let hit = &item.hit;
+        let choice = |item: &Scored<'_>| {
             // 纠错生效时覆盖的是纠正后的字母，换算回原串再查「这个输入串下选过什么」
             let covered = correction
                 .as_ref()
                 .map_or(item.coverage, |c| c.edit.to_original(item.coverage));
-            let choice = letters
+            let chosen = letters
                 .get(..covered)
-                .map_or(0, |input| self.learner.choice_weight(input, hit.text));
-            let log_prob = sentence::transition_log_prob(
+                .map_or(0, |input| self.learner.choice_weight(input, item.hit.text));
+            // A name learned in full pinyin must also be reachable by initials or
+            // mixed pinyin. Only transfer when all typed syllable positions match.
+            if item.hit.exact {
+                chosen.max(
+                    self.learner
+                        .choice_weight(&item.hit.syllables().collect::<String>(), item.hit.text),
+                )
+            } else {
+                chosen
+            }
+        };
+        ranking::rank_with_choices(&mut scored, MAX_CANDIDATES, choice, |item| {
+            let hit = &item.hit;
+            sentence::transition_log_prob(
                 &*self.language_model,
                 self.personal(),
                 self.chain.context(),
                 hit.text,
                 sentence::fallback_log_prob(hit.frequency, log_total),
-            );
-            (choice, log_prob)
+            )
         });
         // 辅码态：词库候选按码段**反向**过滤（逐个问「有没有以码段开头的码」），无码词直接隐藏；
         // 命中的按「完全匹配码 > 码长降序 > 原词频序」重排（stable sort 保住 rank 排好的原序）。
@@ -219,6 +230,8 @@ impl Engine {
                     head_wins,
                 );
             }
+            // Automatic sentences must not undo the user's choice for this full input.
+            self.promote_personal_choices(&mut items);
             // 快捷候选按敲的键认（`rq` 日期），双拼下也是
             self.insert_shortcuts(&mut items, keys);
             self.insert_emoji(&mut items);

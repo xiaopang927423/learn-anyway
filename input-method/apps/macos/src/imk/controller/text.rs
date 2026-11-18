@@ -10,6 +10,20 @@ impl WordMateInputController {
         }
         if host::with(|h| h.assistant.draft_cursor.is_some()).unwrap_or(false) {
             let letter = text.chars().next().filter(|_| text.chars().count() == 1);
+            let page_turn = host::with(|h| {
+                if h.engine.composition().is_empty() {
+                    return None;
+                }
+                match letter {
+                    Some(c) if c == h.page_keys.0 => Some(-1),
+                    Some(c) if c == h.page_keys.1 => Some(1),
+                    _ => None,
+                }
+            })
+            .flatten();
+            if let Some(delta) = page_turn {
+                return self.turn_page(delta, client);
+            }
             if let Some(c) = letter.filter(|c| c.is_ascii_alphabetic() || *c == '\'') {
                 host::with(|h| {
                     let english = modifiers::caps_lock_on();
@@ -252,6 +266,23 @@ impl WordMateInputController {
         let hyphen = composing && !question && c == '-' && c != page_previous && c != page_next;
         // 问字模式下敲的还可能是码点（`u4e00`、`u+1f600`）：数字与 `+` 进缓冲区而不是选词
         let unicode = question && host::with(|h| h.engine.unicode_entry()).unwrap_or(false);
+        // A numbered row stays selectable even when the token has entered raw
+        // mode. Expressions and Unicode entry explicitly own their digits.
+        if composing && !expression && !unicode {
+            if let Some(digit) = c.to_digit(10).filter(|d| *d > 0)
+                && let Some(index) =
+                    host::with(|h| h.session.index_on_page(digit as usize - 1)).flatten()
+                && host::with(|h| h.session.candidate(index).is_some()).unwrap_or(false)
+            {
+                return self.commit_number(index, client);
+            }
+            if c == page_previous {
+                return self.turn_page(-1, client);
+            }
+            if c == page_next {
+                return self.turn_page(1, client);
+            }
+        }
         // 微软 / 搜狗双拼的 `;` 是 ing 键：末尾有落单声母时进缓冲区，其他时候还是标点
         let semicolon =
             composing && c == ';' && host::with(|h| h.engine.takes_semicolon()).unwrap_or(false);

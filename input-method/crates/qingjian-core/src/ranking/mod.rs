@@ -3,9 +3,9 @@
 //! 词级排序规则：
 //! 1. 音节数与输入完全一致的词优先（`kaifa` → 开发 排在 开发者 前）
 //! 2. 覆盖输入字母多者优先（`kaif` → 开发者 排在 开 前）
-//! 3. 切分里非末尾的简拼音节少者优先（`kaifa` 按 `kai fa` 读的 开放 排在按 `kai f a` 读的 开放啊 前）
-//! 4. 最后一个音节完整匹配优先（`kaifa` → 开发 排在 开放 前）
-//! 5. 同一输入串下用户选过的次数（Learner 的 `choice_weight`：`mgs` 选过 美国式，下次 `mgs` 它就是首选）
+//! 3. 同一输入串下用户选过的次数（`kaifa` 选过 开放，下次不再被默认的末音节完整匹配挡住）
+//! 4. 切分里非末尾的简拼音节少者优先（`kaifa` 按 `kai fa` 读的 开放 排在按 `kai f a` 读的 开放啊 前）
+//! 5. 最后一个音节完整匹配优先（无个人选择时 `kaifa` → 开发 排在 开放 前）
 //! 6. 上下文得分：语言模型给的 `log P(词 | 上一个上屏的词)`（个人 bigram 插值，模型不认识的按词库词频兜底并扣分，
 //!    见 `sentence::transition_log_prob`）加用户选择次数的加分（[`weight_bonus`]，对数且封顶），模糊音命中扣 ln 2、
 //!    敲错变体命中扣那类敲错的代价（`correction::TypoKind::cost`，个人敲错表打折）。
@@ -46,12 +46,32 @@ pub fn rank(
     limit: usize,
     context: impl Fn(&Scored<'_>) -> (u32, f64),
 ) {
+    rank_by(items, limit, |_| 0, context);
+}
+
+/// Include input-specific choices before pruning; expensive language-model scoring
+/// still runs only for retained hits. The legacy `rank` entry point remains available.
+pub fn rank_with_choices(
+    items: &mut Vec<Scored<'_>>,
+    limit: usize,
+    choice: impl Fn(&Scored<'_>) -> u32,
+    log_prob: impl Fn(&Scored<'_>) -> f64,
+) {
+    rank_by(items, limit, &choice, |item| (choice(item), log_prob(item)));
+}
+
+fn rank_by(
+    items: &mut Vec<Scored<'_>>,
+    limit: usize,
+    choice: impl Fn(&Scored<'_>) -> u32,
+    context: impl Fn(&Scored<'_>) -> (u32, f64),
+) {
     // 远超上限时先按结构键 + 词频线性选出前面一段：同一个词会被多种切分命中，多选一倍留给去重（结果仍可能略少于上限，无妨）
     let preselect = limit.saturating_mul(2);
     if items.len() > preselect.saturating_mul(2) {
         let mut keyed: Vec<(PreselectKey, Scored<'_>)> = items
             .drain(..)
-            .map(|item| (item.preselect_key(), item))
+            .map(|item| (item.preselect_key(choice(&item)), item))
             .collect();
         keyed.select_nth_unstable_by(preselect, |a, b| b.0.cmp(&a.0));
         keyed.truncate(preselect);

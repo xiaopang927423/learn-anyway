@@ -1,5 +1,6 @@
 //! In-process IMK client fixture. Exercises the actual NSEvent dispatch, not only Engine APIs.
 use super::*;
+mod navigation;
 use objc2::{AnyThread, DefinedClass};
 use objc2_foundation::{
     NSAttributedString, NSDictionary, NSNotFound, NSObject, NSPoint, NSRange, NSRect, NSString,
@@ -642,7 +643,7 @@ pub(crate) fn run() {
         "eat",
         "breakfast",
         "Diffu",
-        "v2",
+        "v0",
         "don't",
         "well-known",
     ] {
@@ -666,7 +667,7 @@ pub(crate) fn run() {
     }
     assert_eq!(
         fixture.ivars().writes.borrow().concat(),
-        "I want to eat breakfast Diffu v2 don't well-known "
+        "I want to eat breakfast Diffu v0 don't well-known "
     );
     event(" ", 49, none);
     event(" ", 49, none);
@@ -703,18 +704,23 @@ pub(crate) fn run() {
         "bre ",
         "Space must not silently take a completion"
     );
-    for c in "foo123".chars() {
+    // Confirm the literal prefix before entering identifier digits: visible 1–9
+    // now select candidates, while digits without a composition pass through.
+    for c in "foo".chars() {
         event(&c.to_string(), 0, none);
     }
-    host::with(|h| assert_eq!(h.engine.composition().typed_text(), "foo123"));
     event("\r", 36, none);
-    assert_eq!(&*fixture.ivars().committed.borrow(), "foo123");
+    assert_eq!(&*fixture.ivars().committed.borrow(), "foo");
     let returned = |characters: &str, code: u16, flags: NSEventModifierFlags| {
         let string = NSString::from_str(characters);
         let e = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
             NSEventType::KeyDown, NSPoint::ZERO, flags, 0., 0, None, &string, &string, false, code).unwrap();
         controller.dispatch_event(&e, client)
     };
+    for c in "123".chars() {
+        assert!(!returned(&c.to_string(), 0, none));
+    }
+    host::with(|h| assert!(h.engine.composition().is_empty()));
     assert!(
         !returned("\r", 36, none),
         "empty English Return is host action"
@@ -920,6 +926,7 @@ pub(crate) fn run() {
         h.engine.flush_learning();
         h.engine.set_predictor(Box::new(qingjian_core::NoPredictor));
     });
+    navigation::run(&controller, &fixture);
     modifiers::set_english_mode(false);
     host::with(|h| {
         h.window.hide();

@@ -103,9 +103,34 @@ impl Engine {
     pub fn commit_staged(&mut self, parts: &[(Candidate, String)], output: &str) {
         let meter = std::mem::replace(&mut self.meter, Box::new(crate::NoUsageMeter));
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // Reconstruct the original input including uncommitted suffixes. Each
+            // part still has its own scope (important for cloud/English choices),
+            // while buffer_left and same_buffer remain true across partial commits.
+            let remaining = self.composition.typed_text();
+            let replay: String = parts
+                .iter()
+                .map(|(_, keys)| keys.as_str())
+                .chain(std::iter::once(remaining.as_str()))
+                .collect();
+            self.set_input(&replay);
             for (candidate, keys) in parts {
-                self.set_input(keys);
+                if keys.is_empty() {
+                    // Edited/raw draft fragments have no source keys to consume.
+                    let rest = self.composition.typed_text();
+                    self.set_input("");
+                    self.commit(candidate);
+                    self.set_input(&rest);
+                    continue;
+                }
+                let new_buffer = !self.chain.same_buffer();
+                let (_, buffer_key) = self.whole_scope();
+                while self.composition.cursor() > keys.len() {
+                    self.composition.move_left();
+                }
                 self.commit(candidate);
+                if new_buffer {
+                    self.chain.set_buffer_key(buffer_key);
+                }
             }
         }));
         self.meter = meter;
@@ -150,22 +175,66 @@ impl Engine {
         {
             return;
         }
-        let syllables: Vec<String> = parts
+        // Cloud readings must be validated again using each part's saved input:
+        // commit_staged has already drained it and may have corrected the model's reading.
+        // Reusing the original syllables here would overwrite that correction.
+        let syllables: Option<Vec<Vec<String>>> = parts
             .iter()
-            .flat_map(|(c, _)| c.syllables.clone())
+            .map(|(candidate, keys)| {
+                if candidate.kind == CandidateKind::Cloud {
+                    self.learned_syllables_for(candidate, keys)
+                } else {
+                    Some(candidate.syllables.clone())
+                }
+            })
             .collect();
+        let Some(syllables) = syllables else {
+            return;
+        };
+        let syllables: Vec<String> = syllables.into_iter().flatten().collect();
         if syllables.len() != count {
             return;
         }
         self.learner.learn_word(output, &syllables);
+        let key: String = parts
+            .iter()
+            .map(|(_, keys)| {
+                let keys = keys.to_ascii_lowercase();
+                self.decode(&keys).map_or_else(
+                    || choice_key(&keys, keys.len()),
+                    |decoded| choice_key(decoded.pinyin(), decoded.pinyin().len()),
+                )
+            })
+            .collect();
+        let reading = syllables.concat();
+        if reading != key {
+            // Remember the validated full reading as well as the actual keys:
+            // initials/completions and decoded schemes can share the learned name.
+            let alias = (reading, output.to_owned());
+            let recorded = self
+                .recent_commits
+                .last()
+                .is_some_and(|c| c.reading_choices.contains(&alias));
+            if !recorded {
+                let before = self.learner.choice_weight(&alias.0, output);
+                self.learner.record_choice(&alias.0, output);
+                if let Some(last) = self.recent_commits.last_mut()
+                    && parts.last().is_some_and(|(part, _)| part.text == last.text)
+                    && self.learner.choice_weight(&alias.0, output) > before
+                {
+                    last.reading_choices.push(alias);
+                }
+            }
+        }
         if parts.len() > 1 || parts[0].0.kind == CandidateKind::Sentence {
-            let key: String = parts
-                .iter()
-                .flat_map(|(_, keys)| keys.chars())
-                .filter(|c| c.is_ascii_alphabetic())
-                .flat_map(char::to_lowercase)
-                .collect();
-            self.learner.record_choice(&key, output);
+            let already_recorded = self
+                .recent_commits
+                .last()
+                .and_then(|c| c.phrase.as_ref())
+                .is_some_and(|(input, text)| input == &key && text == output);
+            if !already_recorded {
+                self.learner.record_choice(&key, output);
+            }
             self.learner.record(&Candidate {
                 text: output.into(),
                 syllables,
@@ -200,6 +269,9 @@ impl Engine {
             candidate_owned.text = simp.clone();
         }
         let candidate = &candidate_owned;
+        let cloud_syllables = (candidate.kind == CandidateKind::Cloud)
+            .then(|| self.learned_syllables(candidate))
+            .flatten();
         // 整句不是一个词，不记词频；按路径上的词逐条记转移（喂个人 n-gram），路径要在拼音消耗前重算
         let sentence_words = (candidate.kind == CandidateKind::Sentence)
             .then(|| self.sentence_words(candidate))
@@ -239,9 +311,9 @@ impl Engine {
             CandidateKind::Emoji => self.consumed_by(candidate),
             // 云端词是针对整段作用域要的（拼音可能有错，按音节对不上），上屏吃掉整段；词库里没有的记成用户词
             CandidateKind::Cloud => {
-                if let Some(syllables) = self.learned_syllables(candidate) {
+                if let Some(syllables) = &cloud_syllables {
                     let learned = Candidate {
-                        syllables,
+                        syllables: syllables.clone(),
                         ..candidate.clone()
                     };
                     if !self.knows_word(&learned) {
@@ -318,9 +390,13 @@ impl Engine {
                 // 形码没有音节，`record_word` 里按音节数做的整段造词自然不会触发
                 self.record_word(
                     &candidate.text,
-                    &candidate.syllables,
+                    if candidate.kind == CandidateKind::Cloud {
+                        cloud_syllables.as_deref().unwrap_or(&[])
+                    } else {
+                        &candidate.syllables
+                    },
                     EXPLICIT_TRANSITION_WEIGHT,
-                    true,
+                    candidate.kind != CandidateKind::Cloud || cloud_syllables.is_some(),
                     buffer_left,
                 );
             }
@@ -364,6 +440,22 @@ impl Engine {
         } else {
             None
         };
+        let mut reading_choices = Vec::new();
+        if let Some((key, text)) = &phrase {
+            let reading: String = self
+                .chain
+                .buffer_words()
+                .iter()
+                .flat_map(|(_, syllables)| syllables.iter().map(String::as_str))
+                .collect();
+            if !reading.is_empty() && &reading != key {
+                let before = self.learner.choice_weight(&reading, text);
+                self.learner.record_choice(&reading, text);
+                if self.learner.choice_weight(&reading, text) > before {
+                    reading_choices.push((reading, text.clone()));
+                }
+            }
+        }
         self.punctuation.note_committed(&candidate.text);
         self.history.record(&candidate.text);
         let learned = matches!(
@@ -388,6 +480,7 @@ impl Engine {
                 erased: 0,
                 log_id,
                 phrase,
+                reading_choices,
             }
         } else {
             let mut plain = LastCommit::plain(&candidate.text);
@@ -482,6 +575,9 @@ impl Engine {
         }
         if let Some((key, phrase)) = &last.phrase {
             self.learner.unrecord_choice(key, phrase);
+        }
+        for (input, word) in &last.reading_choices {
+            self.learner.unrecord_choice(input, word);
         }
     }
 

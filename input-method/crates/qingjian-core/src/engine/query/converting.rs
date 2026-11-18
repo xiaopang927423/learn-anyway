@@ -39,7 +39,32 @@ impl Engine {
                 // 整段本身就是英文词（`database`）：备选整句会把那条英文候选再往后挤，只给一条
                 let alternates = !self.scope_is_english_word();
                 let sentences = self.plain_sentence(items, best, typos, alternates);
-                let position = leading_english(items);
+                let mut position = leading_english(items);
+                // The parser's greedy segmentation is only one possible reading.
+                // A constructed jin'an sentence must not displace the exact ji'nan
+                // dictionary word for `jinan`. Explicit separators still constrain lookup.
+                let spelling = if typos {
+                    self.decode(keys)
+                        .map_or_else(|| keys.to_owned(), |d| d.pinyin().to_owned())
+                } else {
+                    best.joined("'")
+                };
+                if let Some(sentence) = sentences.first()
+                    && sentence.kind == CandidateKind::Sentence
+                    && let Some(word) = items.iter().find(|c| {
+                        c.kind == CandidateKind::Chinese
+                            && super::spells_input(&c.syllables, &spelling)
+                    })
+                    && word.syllables != sentence.syllables
+                {
+                    position = items
+                        .iter()
+                        .rposition(|c| {
+                            c.kind == CandidateKind::Chinese
+                                && super::spells_input(&c.syllables, &spelling)
+                        })
+                        .map_or(position, |index| index + 1);
+                }
                 // 词图读不通整段时模型直接生成的整句排在词图那几条前面：这时词图给的是把英文段
                 // 硬读成拼音的结果（`yongdockerbushuhenfangbian` → 用的哦乘客仍不熟很方便），排它前面没有可惜的
                 // `typos` 为假就是拼写纠错已经生效（见调用处），那时 `best` 是纠正后的切分

@@ -44,39 +44,6 @@ impl WordMateInputController {
                     query.candidates.items
                 })
                 .unwrap_or_default();
-            if h.engine.wants_english_space(&format!(
-                "{}{}",
-                h.assistant.context,
-                h.assistant.draft_text()
-            )) {
-                let raw = h.engine.composition().typed_text();
-                let literal = candidates
-                    .iter()
-                    .position(|candidate| {
-                        candidate.kind == qingjian_core::CandidateKind::English
-                            && candidate.text.eq_ignore_ascii_case(&raw)
-                    })
-                    .map(|position| candidates.remove(position))
-                    .unwrap_or(qingjian_core::Candidate {
-                        text: raw.clone(),
-                        kind: qingjian_core::CandidateKind::English,
-                        syllables: Vec::new(),
-                        reading: None,
-                        translation: None,
-                        aux_code: None,
-                    });
-                candidates.insert(
-                    0,
-                    qingjian_core::Candidate {
-                        text: raw,
-                        ..literal
-                    },
-                );
-            }
-            crate::candidate_fallback::ensure_literal(
-                &mut candidates,
-                &h.engine.composition().typed_text(),
-            );
             let draft = h.assistant.draft_text();
             if !draft.is_empty() {
                 marked = format!("{draft}{marked}");
@@ -88,26 +55,8 @@ impl WordMateInputController {
                             Preedit::plain(&draft, draft.chars().count()).expect("nonempty draft")
                         }),
                 );
-                if candidates.is_empty() && h.engine.composition().is_empty() {
-                    candidates.push(qingjian_core::Candidate {
-                        text: String::new(),
-                        kind: qingjian_core::CandidateKind::Generated,
-                        syllables: Vec::new(),
-                        reading: None,
-                        translation: if h.assistant.draft.len() == 1 {
-                            h.assistant.draft[0].candidate.translation.clone()
-                        } else {
-                            None
-                        },
-                        aux_code: None,
-                    });
-                }
             }
-            crate::candidate_fallback::ensure(
-                &mut candidates,
-                &h.engine.composition().typed_text(),
-                &draft,
-            );
+            h.prepare_candidates(&mut candidates);
             if h.assistant.draft_cursor.is_some() {
                 let query = h.engine.query().ok();
                 let token = query

@@ -49,6 +49,20 @@ impl WordMateInputController {
         }
         let composing = host::with(|h| !h.engine.composition().is_empty()).unwrap_or(false);
         let single = text.chars().next().filter(|_| text.chars().count() == 1);
+        if !composing && single.is_some_and(|c| c.is_ascii_digit()) {
+            host::with(|h| h.engine.note_passthrough(single.unwrap()));
+            return false;
+        }
+        // The window labels candidates 1–9 in both modes. Honor those labels
+        // before treating a digit as part of an English token.
+        if composing
+            && let Some(digit) = single.and_then(|c| c.to_digit(10)).filter(|d| *d > 0)
+            && let Some(index) =
+                host::with(|h| h.session.index_on_page(digit as usize - 1)).flatten()
+            && host::with(|h| h.session.candidate(index).is_some()).unwrap_or(false)
+        {
+            return self.commit_number(index, client);
+        }
         if let Some(c) = single
             .filter(|c| c.is_ascii_alphanumeric() || (composing && matches!(c, '\'' | '_' | '-')))
         {
@@ -84,6 +98,12 @@ impl WordMateInputController {
             }
             return false;
         }
+        if !flags.contains(NSEventModifierFlags::Shift)
+            && event.characters().is_none_or(|text| text.is_empty())
+            && let Some(digit) = digit_key(key)
+        {
+            return self.handle_english_text(&digit.to_string(), client);
+        }
         match key {
             49 => {
                 let word = host::with(|h| h.engine.take_raw()).unwrap_or_default();
@@ -113,6 +133,11 @@ impl WordMateInputController {
                 self.move_highlight(-1, client);
                 true
             }
+            116 if composing => self.turn_page(-1, client),
+            121 if composing => self.turn_page(1, client),
+            48 if composing => self.turn_page(-1, client), // Shift+Tab
+            123 if composing && self.move_cells(-1, client) => true,
+            124 if composing && self.move_cells(1, client) => true,
             36 | 76 if composing => {
                 self.commit_raw(client);
                 true

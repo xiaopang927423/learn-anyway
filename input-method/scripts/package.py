@@ -6,6 +6,9 @@ release=json.loads((ROOT.parent/'release.json').read_text())
 version=release['components']['inputMethod']
 bundle=ROOT/'bundle/WordMateInput.app'
 if not bundle.exists():raise SystemExit('Build WordMateInput.app first')
+info=plistlib.loads((bundle/'Contents/Info.plist').read_bytes())
+if (info['CFBundleShortVersionString'],info['CFBundleVersion']) != (version,release['inputMethodBuild']):
+    raise SystemExit('Stale IME build; run scripts/build.py before packaging')
 subprocess.run(['codesign','--verify','--strict',str(bundle)],check=True)
 output=ROOT/'dist';output.mkdir(exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='wm-ime-package-') as directory:

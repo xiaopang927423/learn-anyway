@@ -65,6 +65,11 @@ impl CommitChain {
         self.buffer_key = key;
     }
 
+    /// Staged replay scopes each part separately, but learning keeps the original full input.
+    pub(super) fn set_buffer_key(&mut self, key: String) {
+        self.buffer_key = key;
+    }
+
     /// 当前这段拼音里已上屏的词，按顺序。
     pub fn buffer_words(&self) -> &[(String, Vec<String>)] {
         &self.buffer_words

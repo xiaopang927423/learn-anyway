@@ -23,7 +23,7 @@ pub fn ensure_literal(candidates: &mut Vec<Candidate>, raw: &str) {
         || !raw.bytes().all(|c| c.is_ascii_alphabetic())
         || candidates
             .iter()
-            .any(|c| c.kind == CandidateKind::English && c.text.eq_ignore_ascii_case(raw))
+            .any(|c| c.kind == CandidateKind::English && c.text == raw)
     {
         return;
     }
@@ -79,6 +79,19 @@ mod tests {
         assert_eq!(items[0].kind, CandidateKind::Custom(1));
         assert_eq!(items[1].text, "Diffu");
         ensure_literal(&mut items, "Diffu");
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn dictionary_acronym_does_not_hide_the_exact_typed_case() {
+        let mut items = vec![];
+        ensure_literal(&mut items, "NI");
+        ensure_literal(&mut items, "ni");
+        assert_eq!(
+            items.iter().map(|c| c.text.as_str()).collect::<Vec<_>>(),
+            ["NI", "ni"]
+        );
+        ensure_literal(&mut items, "ni");
         assert_eq!(items.len(), 2);
     }
 }

@@ -1,5 +1,6 @@
 //! 呈现：删候选、按应用关英文候选、翻译选区的起止、提示气泡、会话重置与候选窗口绘制。
 
+mod composition;
 mod notice;
 mod translation_job;
 
@@ -98,15 +99,13 @@ impl Host {
             && !(0..self.session.layout.len()).any(|i| self.session.candidate(i).is_some())
         {
             let raw = self.engine.composition().typed_text();
-            let draft = self.assistant.draft_text();
             let mut candidates = self
                 .engine
                 .query()
                 .ok()
                 .map(|q| q.candidates.items)
                 .unwrap_or_default();
-            crate::candidate_fallback::ensure(&mut candidates, &raw, &draft);
-            crate::candidate_fallback::ensure_literal(&mut candidates, &raw);
+            self.prepare_candidates(&mut candidates);
             if !candidates.is_empty() {
                 let text = self.assistant.composition_text(&raw);
                 let cursor = self
@@ -185,7 +184,7 @@ impl Host {
         }
         let pages = self.session.pages();
         let (original, translated, space) = self.settings.config().shortcut.input_keys();
-        let footer = if self.translation.is_some() {
+        let mut footer = if self.translation.is_some() {
             Some(format!(
                 "{} 英文 · {} 原文 · Esc 取消",
                 translated.label(),
@@ -203,17 +202,22 @@ impl Host {
             ))
         } else {
             Some(format!(
-                "{} 上屏 · {} 英文 · {} 草稿空格{}",
+                "{} 上屏 · {} 英文 · {} 草稿空格",
                 original.label(),
                 translated.label(),
-                space.label(),
-                if pages > 1 {
-                    format!(" · {}/{pages}", page + 1)
-                } else {
-                    String::new()
-                }
+                space.label()
             ))
         };
+        if self.translation.is_none() && pages > 1 {
+            let keys = if self.engine.english_mode() {
+                "PgUp/PgDn".to_owned()
+            } else {
+                format!("{}/{}", self.page_keys.0, self.page_keys.1)
+            };
+            if let Some(footer) = &mut footer {
+                footer.push_str(&format!(" · {keys} 翻页 {}/{pages}", page + 1));
+            }
+        }
         let frame = Frame {
             preedit,
             rows,

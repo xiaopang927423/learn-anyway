@@ -166,7 +166,10 @@ impl Host {
             return;
         };
         self.engine.annotate(&mut query.candidates);
-        let preedit = Preedit::from_marked(&query.marked_segments(), query.segments_cursor());
+        self.prepare_candidates(&mut query.candidates.items);
+        // Rescoring only updates candidates. Preserve the preedit already sent to IMK,
+        // including the draft prefix and its editor caret.
+        let preedit = self.session.preedit.clone();
         let cloud = self.session.layout.cloud().to_vec();
         self.reset_session(preedit, query.candidates.items);
         if !cloud.is_empty() {

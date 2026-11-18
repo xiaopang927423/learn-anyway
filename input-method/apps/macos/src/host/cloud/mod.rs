@@ -62,11 +62,12 @@ impl Host {
             return;
         }
         // 云端词补进第一页末尾（前面的本地候选不动），整句挂在 preedit 右侧；云端词没有译文，先补上。
-        // 用户已经翻到后面的页、或高亮已经移到会被挪走的那几格时不补：那几格正被他看着 / 要选
+        // 用户开始选词 / 翻页后不再补；翻回首页也保持当前编号。
         let layout = &self.session.layout;
         let untouched = cloud_slots_untouched(
             self.session.page,
             self.session.highlighted,
+            self.session.navigated,
             layout.local().is_empty(),
             layout.page_size(),
             layout.capacity(),
@@ -94,18 +95,18 @@ impl Host {
     }
 }
 
-/// 用系统的 `open` 打开文件或目录；输入法进程没有自己的文档窗口，交给访达 / 默认编辑器最省事。
-/// 云端词到了还能不能补进第一页：用户还在第一页，且高亮没落在会被云端词顶掉的那几格上。
-/// 没有本地候选（问字模式）时整页都是云端的，谈不上挪走谁，永远能补——
+/// 云端词到了还能不能补进第一页：用户还没有开始导航，且高亮没落在会被顶掉的格上。
+/// 没有本地候选（问字模式）时整页都是云端的，允许填入首次答案——
 /// 之前没分这种情况，`page_size - capacity` 算出 0，问字的答案全被当成「会打扰用户」丢掉了。
 pub(super) fn cloud_slots_untouched(
     page: usize,
     highlighted: usize,
+    navigated: bool,
     local_empty: bool,
     page_size: usize,
     capacity: usize,
 ) -> bool {
-    page == 0 && (local_empty || highlighted < page_size.saturating_sub(capacity))
+    !navigated && page == 0 && (local_empty || highlighted < page_size.saturating_sub(capacity))
 }
 
 /// 翻译窗口里的一行：译文（或占位文字）当作云端来源的候选画出来。
@@ -125,10 +126,13 @@ mod tests {
     #[test]
     fn question_answers_fill_the_page_even_though_every_slot_is_cloud() {
         // 问字：没有本地候选，capacity == page_size
-        assert!(super::cloud_slots_untouched(0, 0, true, 9, 9));
+        assert!(super::cloud_slots_untouched(0, 0, false, true, 9, 9));
         // 组句：高亮在前面的本地格上能补，高亮已在末尾两格（云端要占的位置）不补，翻页后不补
-        assert!(super::cloud_slots_untouched(0, 0, false, 9, 2));
-        assert!(!super::cloud_slots_untouched(0, 7, false, 9, 2));
-        assert!(!super::cloud_slots_untouched(1, 0, false, 9, 2));
+        assert!(super::cloud_slots_untouched(0, 0, false, false, 9, 2));
+        assert!(!super::cloud_slots_untouched(0, 7, false, false, 9, 2));
+        assert!(!super::cloud_slots_untouched(1, 0, false, false, 9, 2));
+        // Returning to page one or moving back to the first cell must not unlock it.
+        assert!(!super::cloud_slots_untouched(0, 0, true, false, 9, 2));
+        assert!(!super::cloud_slots_untouched(0, 1, true, false, 9, 2));
     }
 }

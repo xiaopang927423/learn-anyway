@@ -3,7 +3,7 @@
   "components": {
     "desktop": "0.6.1",
     "extension": "0.6.1",
-    "inputMethod": "0.6.0"
+    "inputMethod": "0.6.4"
   },
-  "inputMethodBuild": "6001"
+  "inputMethodBuild": "6040"
 }

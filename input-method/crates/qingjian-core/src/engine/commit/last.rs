@@ -30,6 +30,9 @@ pub struct LastCommit {
 
     /// 整段拼音分几次选完时记的「整段 → 合成词」选择（学习键, 合成词），撤销时一并退回。
     pub phrase: Option<(String, String)>,
+
+    /// Validated full-reading aliases added for abbreviation/completion choices.
+    pub reading_choices: Vec<(String, String)>,
 }
 
 impl LastCommit {
@@ -45,6 +48,7 @@ impl LastCommit {
             erased: 0,
             log_id: 0,
             phrase: None,
+            reading_choices: Vec::new(),
         }
     }
 

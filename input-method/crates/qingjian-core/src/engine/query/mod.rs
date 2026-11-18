@@ -18,7 +18,70 @@ pub(super) use result::join_marked;
 pub(super) use result::join_marked_typed;
 pub(super) use snapshot::QuerySnapshot;
 
+/// Exact full spelling, respecting any explicit syllable separators.
+pub(super) fn spells_input(syllables: &[String], mut input: &str) -> bool {
+    for syllable in syllables {
+        let Some(rest) = input.strip_prefix(syllable.as_str()) else {
+            return false;
+        };
+        input = rest.trim_start_matches('\'');
+    }
+    input.is_empty()
+}
+
 impl Engine {
+    /// Reapply confirmed full-input choices after automatic sentence/English insertion.
+    /// Prefix words keep their normal position, and custom/shortcut slots are added later.
+    pub(super) fn promote_personal_choices(&self, items: &mut [Candidate]) {
+        let (scope_len, input) = self.whole_scope();
+        if input.is_empty() {
+            return;
+        }
+        // English placement already compares Chinese choices with English usage
+        // and respects the Chinese-first setting. Preserve that leading group.
+        let start = leading_english(items);
+        let decoded = self.decode(self.composition.scope());
+        let spelling = decoded
+            .as_ref()
+            .map_or(self.composition.scope(), |d| d.pinyin());
+        let segmentations = parser::segment(spelling).unwrap_or_default();
+        items[start..].sort_by_cached_key(|candidate| {
+            let count = if matches!(
+                candidate.kind,
+                CandidateKind::Chinese | CandidateKind::Sentence
+            ) {
+                let chosen = self.learner.choice_weight(&input, &candidate.text);
+                let reading = candidate.syllables.concat();
+                let learned = self.learner.choice_weight(&reading, &candidate.text);
+                let matching = learned > chosen
+                    && segmentations.iter().any(|seg| {
+                        seg.syllables.len() == candidate.syllables.len()
+                            && seg
+                                .syllables
+                                .iter()
+                                .zip(&candidate.syllables)
+                                .enumerate()
+                                .all(|(i, (typed, syllable))| {
+                                    if typed.complete && i + 1 < seg.syllables.len() {
+                                        syllable == &typed.text
+                                    } else {
+                                        syllable.starts_with(&typed.text)
+                                    }
+                                })
+                    });
+                let weight = if matching { learned } else { chosen };
+                if weight > 0 && self.consumed_by(candidate).0 == scope_len {
+                    weight
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
+            std::cmp::Reverse(count)
+        });
+    }
+
     /// 解析当前缓冲区并生成排好序的候选。**不带译文**，译文由 [`Self::annotate`] 补。
     ///
     /// 光标停在拼音中间时只按光标前的那段算候选（`ni|hao` 出 你），光标后的拼音留着，

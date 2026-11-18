@@ -43,19 +43,24 @@ impl Engine {
         // 同一段编码下选过的词优先，再按上下文得分（上一个上屏的词）；词频只在模型不认识时兜底
         let start = Instant::now();
         let letters = choice_key(keys, keys.len());
-        ranking::rank(&mut scored, MAX_CANDIDATES, |item| {
-            let choice = letters
-                .get(..item.coverage)
-                .map_or(0, |input| self.learner.choice_weight(input, item.hit.text));
-            let log_prob = sentence::transition_log_prob(
-                &*self.language_model,
-                self.personal(),
-                self.chain.context(),
-                item.hit.text,
-                sentence::fallback_log_prob(item.hit.frequency, log_total),
-            );
-            (choice, log_prob)
-        });
+        ranking::rank_with_choices(
+            &mut scored,
+            MAX_CANDIDATES,
+            |item| {
+                letters
+                    .get(..item.coverage)
+                    .map_or(0, |input| self.learner.choice_weight(input, item.hit.text))
+            },
+            |item| {
+                sentence::transition_log_prob(
+                    &*self.language_model,
+                    self.personal(),
+                    self.chain.context(),
+                    item.hit.text,
+                    sentence::fallback_log_prob(item.hit.frequency, log_total),
+                )
+            },
+        );
         let rank = start.elapsed();
         // `exact` 是排序的最高位，打全的都在最前面
         let exact = scored.iter().take_while(|s| s.hit.exact).count();

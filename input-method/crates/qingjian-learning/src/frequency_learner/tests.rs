@@ -424,3 +424,282 @@ fn bilingual_common_words_survive_reload_and_literal_english_improves_ranking() 
     assert_eq!(reopened.learner().english_weight("compass"), 5);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn confirmed_cloud_phrase_keeps_validated_readings_after_reload() {
+    use qingjian_core::{CandidateKind, Engine};
+    let dir = std::env::temp_dir().join(format!(
+        "wordmate-cloud-readings-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let dictionary = || Dictionary::parse("我\two\t100\n的\tde\t100\n书\tshu\t100\n").unwrap();
+    for (name, input, model_reading, suffix, expected) in [
+        ("corrected", "wode", "wo di", false, Some("wo de")),
+        ("shifted", "WoDe", "wo di", false, Some("wo de")),
+        ("combined", "wode", "wo di", true, Some("wo de shu")),
+        ("fallback", "wdoe", "wo de", false, Some("wo de")),
+        ("rejected", "wodi", "wo ni", true, None),
+    ] {
+        let path = dir.join(name).join("user.tsv");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut engine = Engine::new(dictionary())
+            .with_learner(Box::new(FrequencyLearner::from_path(&path).unwrap()));
+        let cloud = Candidate {
+            text: "我的".into(),
+            kind: CandidateKind::Cloud,
+            syllables: model_reading
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect(),
+            reading: None,
+            translation: None,
+            aux_code: None,
+        };
+        let output = if suffix { "我的书" } else { "我的" };
+        for _ in 0..3 {
+            engine.break_chain();
+            engine.set_input(input);
+            let (_, keys) = engine.stage_candidate(&cloud).unwrap();
+            let mut parts = vec![(cloud.clone(), keys)];
+            if suffix {
+                engine.set_input("shu");
+                let book = engine.query().unwrap().candidates.items[0].clone();
+                let (_, keys) = engine.stage_candidate(&book).unwrap();
+                parts.push((book, keys));
+            }
+            engine.commit_staged(&parts, output);
+            // The live composition has been drained. Each part must use its saved keys.
+            assert!(engine.composition().is_empty());
+            engine.remember_confirmed_phrase(&parts, output);
+        }
+        engine.flush_learning();
+        let restored = FrequencyLearner::from_path(&path).unwrap();
+        match expected {
+            Some(reading) => {
+                assert_eq!(
+                    restored.words.get(output).map(String::as_str),
+                    Some(reading),
+                    "{name}"
+                );
+                let mut reopened = Engine::new(dictionary()).with_learner(Box::new(restored));
+                reopened.set_input(&reading.replace(' ', ""));
+                assert!(
+                    reopened
+                        .query()
+                        .unwrap()
+                        .candidates
+                        .items
+                        .iter()
+                        .any(|c| c.text == output),
+                    "{name}"
+                );
+            }
+            None => assert!(
+                !restored.words.contains_key(output),
+                "unverified cloud reading must not form a phrase"
+            ),
+        }
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn confirmed_candidate_preference_survives_reload_and_respects_learning_switches() {
+    use qingjian_core::Engine;
+    let dir = std::env::temp_dir().join(format!(
+        "wordmate-preference-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("user.tsv");
+    let reopen = || {
+        Engine::new(Dictionary::parse("开发\tkai fa\t9000\n开放\tkai fang\t1\n").unwrap())
+            .with_learner(Box::new(FrequencyLearner::from_path(&path).unwrap()))
+    };
+    let confirm = |engine: &mut Engine, text: &str| {
+        engine.set_input("kaifa");
+        let candidate = engine
+            .query()
+            .unwrap()
+            .candidates
+            .items
+            .into_iter()
+            .find(|c| c.text == text)
+            .unwrap();
+        let before = engine.learner().choice_weight("kaifa", text);
+        let (_, keys) = engine.stage_candidate(&candidate).unwrap();
+        assert_eq!(
+            engine.learner().choice_weight("kaifa", text),
+            before,
+            "previewing a choice must not learn before host confirmation"
+        );
+        let parts = vec![(candidate, keys)];
+        engine.commit_staged(&parts, text);
+        engine.remember_confirmed_phrase(&parts, text);
+        engine.break_chain();
+    };
+    let first = |engine: &mut Engine| {
+        engine.set_input("kaifa");
+        engine.query().unwrap().candidates.items[0].text.clone()
+    };
+    let mut engine = reopen();
+    assert_eq!(first(&mut engine), "开发");
+    confirm(&mut engine, "开放");
+    assert_eq!(first(&mut engine), "开放");
+    engine.flush_learning();
+    let mut restored = reopen();
+    assert_eq!(first(&mut restored), "开放");
+    restored.set_learning(false);
+    confirm(&mut restored, "开发");
+    restored.set_learning(true);
+    restored.set_private(true);
+    confirm(&mut restored, "开发");
+    restored.set_private(false);
+    assert_eq!(restored.learner().choice_weight("kaifa", "开发"), 0);
+    assert_eq!(first(&mut restored), "开放");
+    for _ in 0..2 {
+        confirm(&mut restored, "开发");
+    }
+    assert_eq!(first(&mut restored), "开发");
+    restored.flush_learning();
+    assert_eq!(first(&mut reopen()), "开发");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn split_names_are_learned_in_full_and_recalled_by_initials_after_reload() {
+    use qingjian_core::{Engine, shuangpin::Scheme};
+    let dir = std::env::temp_dir().join(format!(
+        "wordmate-name-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    for (name, keys, scheme) in [
+        ("pinyin", "zhangyuxuan", None),
+        ("shuangpin", "vhyuxr", Some(Scheme::Xiaohe)),
+        ("initials", "zyx", None),
+    ] {
+        let path = dir.join(name).join("user.tsv");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let dictionary = || {
+            Dictionary::parse(
+                "张\tzhang\t100\n宇\tyu\t100\n萱\txuan\t100\n这一下\tzhe yi xia\t90000\n",
+            )
+            .unwrap()
+        };
+        let mut engine = Engine::new(dictionary())
+            .with_learner(Box::new(FrequencyLearner::from_path(&path).unwrap()));
+        engine.set_shuangpin(scheme);
+        for _ in 0..2 {
+            engine.break_chain();
+            engine.set_input(keys);
+            for text in ["张", "宇", "萱"] {
+                let candidate = engine
+                    .query()
+                    .unwrap()
+                    .candidates
+                    .items
+                    .into_iter()
+                    .find(|c| c.text == text)
+                    .unwrap();
+                let (_, part_keys) = engine.stage_candidate(&candidate).unwrap();
+                let remaining = engine.composition().typed_text();
+                engine.commit_staged(&[(candidate, part_keys)], text);
+                assert_eq!(engine.composition().typed_text(), remaining);
+                engine.set_input(&remaining);
+            }
+        }
+        assert_eq!(
+            engine.learner().choice_weight("zhangyuxuan", "张宇萱"),
+            2,
+            "{name}"
+        );
+        engine.flush_learning();
+        let mut reopened = Engine::new(dictionary())
+            .with_learner(Box::new(FrequencyLearner::from_path(&path).unwrap()));
+        for input in ["zhangyuxuan", "zhang'yu'xuan", "zyx", "zhangyx"] {
+            reopened.set_input(input);
+            assert_eq!(
+                reopened.query().unwrap().candidates.items[0].text,
+                "张宇萱",
+                "{name}: {input}"
+            );
+        }
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn confirmed_shuangpin_phrase_records_decoded_full_reading() {
+    use qingjian_core::{Engine, shuangpin::Scheme};
+    let mut engine = Engine::new(Dictionary::parse("星\txing\t100\n河\the\t100\n").unwrap())
+        .with_learner(Box::new(FrequencyLearner::default()));
+    engine.set_shuangpin(Some(Scheme::Xiaohe));
+    engine.set_input("xkhe");
+    let mut parts = Vec::new();
+    for text in ["星", "河"] {
+        let candidate = engine
+            .query()
+            .unwrap()
+            .candidates
+            .items
+            .into_iter()
+            .find(|c| c.text == text)
+            .unwrap();
+        let (_, keys) = engine.stage_candidate(&candidate).unwrap();
+        parts.push((candidate, keys));
+    }
+    engine.commit_staged(&parts, "星河");
+    engine.remember_confirmed_phrase(&parts, "星河");
+    assert_eq!(engine.learner().choice_weight("xinghe", "星河"), 1);
+    assert_eq!(engine.learner().choice_weight("xkhe", "星河"), 0);
+}
+
+#[test]
+fn replacing_an_abbreviated_name_retracts_its_full_reading_preference() {
+    use qingjian_core::Engine;
+    let mut engine = Engine::new(
+        Dictionary::parse("张宇萱\tzhang yu xuan\t1\n张宇轩\tzhang yu xuan\t9000\n").unwrap(),
+    )
+    .with_learner(Box::new(FrequencyLearner::default()));
+    engine.set_input("zyx");
+    let candidate = engine
+        .query()
+        .unwrap()
+        .candidates
+        .items
+        .into_iter()
+        .find(|c| c.text == "张宇萱")
+        .unwrap();
+    let (_, keys) = engine.stage_candidate(&candidate).unwrap();
+    let parts = vec![(candidate, keys)];
+    engine.commit_staged(&parts, "张宇萱");
+    engine.remember_confirmed_phrase(&parts, "张宇萱");
+    assert_eq!(engine.learner().choice_weight("zhangyuxuan", "张宇萱"), 1);
+    for _ in 0..3 {
+        engine.note_backspace();
+    }
+    engine.set_input("zyx");
+    let replacement = engine
+        .query()
+        .unwrap()
+        .candidates
+        .items
+        .into_iter()
+        .find(|c| c.text == "张宇轩")
+        .unwrap();
+    engine.commit(&replacement);
+    assert_eq!(engine.learner().choice_weight("zyx", "张宇萱"), 0);
+    assert_eq!(engine.learner().choice_weight("zhangyuxuan", "张宇萱"), 0);
+}
