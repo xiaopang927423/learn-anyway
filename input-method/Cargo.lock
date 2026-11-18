@@ -2736,10 +2736,13 @@ version = "0.1.1"
 dependencies = [
  "base64 0.23.1",
  "ed25519-dalek",
+ "flate2",
+ "qingjian-dictionary",
  "qingjian-platform",
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.20",
  "tokio",
  "tracing",

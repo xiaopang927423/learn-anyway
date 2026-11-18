@@ -1,6 +1,7 @@
 //! 词库管理：随包领域词库开关，用户导入词库的导入 / 移除 / 开关，重新加载。
 
 mod info;
+mod online;
 
 pub use info::DictionaryInfo;
 
@@ -12,10 +13,63 @@ impl Host {
     pub(super) fn dictionary_infos(&self) -> Vec<DictionaryInfo> {
         let config = &self.settings.config().dictionaries;
         let mut infos = Vec::new();
-        if let Some(dir) = paths::bundled_dicts_dir() {
-            for (stem, path) in extra_dictionaries::list(&dir) {
-                let enabled = config.is_domain_enabled(&stem);
-                infos.push(dictionary_info(stem, path, true, enabled));
+        for (stem, candidates) in extra_dictionaries::domain_paths(
+            paths::bundled_dicts_dir().as_deref(),
+            paths::dicts_dir().as_deref(),
+        ) {
+            let path = candidates
+                .iter()
+                .find(|p| Dictionary::from_path(p).is_ok_and(|d| !d.is_empty()))
+                .unwrap_or(&candidates[0])
+                .clone();
+            let enabled = config.is_domain_enabled(&stem);
+            infos.push(dictionary_info(stem, path, true, enabled));
+        }
+        if let (Some(manager), Some(dir)) = (&self.online_dictionaries, paths::dicts_dir()) {
+            let root = dir.join("online");
+            for entry in &manager.entries {
+                let stem = entry.stem();
+                let index = infos
+                    .iter()
+                    .position(|i| i.builtin && i.stem == stem)
+                    .unwrap_or_else(|| {
+                        infos.push(dictionary_info(
+                            stem.clone(),
+                            root.join(format!("{stem}.qj")),
+                            true,
+                            config.is_domain_enabled(&stem),
+                        ));
+                        infos.len() - 1
+                    });
+                let info = &mut infos[index];
+                info.name = entry.name.clone();
+                info.download_id = Some(entry.id.clone());
+                let installed = qingjian_update::dictionaries::installed_version(&root, &stem);
+                info.download_label = if !entry.compatible() {
+                    "需升级输入法"
+                } else if installed.is_none() && root.join(format!("{stem}.qj")).exists() {
+                    "修复"
+                } else if installed.is_none() {
+                    "下载"
+                } else if qingjian_update::dictionaries::needs_update(entry, &root) {
+                    "更新"
+                } else {
+                    "重新下载"
+                }
+                .into();
+                let local = installed.map(|v| format!("已下载 {v}")).unwrap_or_else(|| {
+                    if info.broken {
+                        "未安装".into()
+                    } else {
+                        "随包版".into()
+                    }
+                });
+                info.detail = format!(
+                    "{local} · 最新 {} · {:.1} MB · {}",
+                    entry.version,
+                    entry.bytes as f64 / 1048576.0,
+                    entry.license
+                );
             }
         }
         if let Some(dir) = paths::dicts_dir() {
@@ -116,5 +170,6 @@ impl Host {
         tracing::info!(count = loaded.len(), "附加词库已装配");
         self.engine.set_extra_dictionaries(loaded);
         self.applied_dictionaries = config;
+        self.dictionary_files = Self::dictionary_file_snapshot();
     }
 }

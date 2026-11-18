@@ -50,9 +50,9 @@ impl Engine {
                 candidate.kind,
                 CandidateKind::Chinese | CandidateKind::Sentence
             ) {
-                let chosen = self.learner.choice_weight(&input, &candidate.text);
+                let chosen = self.learner.preference_weight(&input, &candidate.text);
                 let reading = candidate.syllables.concat();
-                let learned = self.learner.choice_weight(&reading, &candidate.text);
+                let learned = self.learner.preference_weight(&reading, &candidate.text);
                 let matching = learned > chosen
                     && segmentations.iter().any(|seg| {
                         seg.syllables.len() == candidate.syllables.len()

@@ -13,6 +13,9 @@ pub fn auxiliary_infos(config: &qingjian_platform::Config) -> Vec<DictionaryInfo
                 let enabled = config.aux_code.is_enabled(&stem);
                 let info = match table {
                     Ok(table) => DictionaryInfo {
+                        download_id: None,
+                        download_label: String::new(),
+                        detail: String::new(),
                         name: table.metadata().map_or(stem.clone(), |m| m.name.clone()),
                         entries: table.len(),
                         license: table
@@ -25,6 +28,9 @@ pub fn auxiliary_infos(config: &qingjian_platform::Config) -> Vec<DictionaryInfo
                         path,
                     },
                     Err(_) => DictionaryInfo {
+                        download_id: None,
+                        download_label: String::new(),
+                        detail: String::new(),
                         name: stem.clone(),
                         entries: 0,
                         license: String::new(),

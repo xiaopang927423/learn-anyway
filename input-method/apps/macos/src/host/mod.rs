@@ -95,6 +95,11 @@ pub struct Host {
 
     /// 偏好设置「词库」页显示的列表，勾选框 / 移除按钮的下标对着它。
     dictionary_list: Vec<DictionaryInfo>,
+    online_dictionaries: Option<qingjian_update::dictionaries::Manager>,
+    online_pending: bool,
+    online_enable: Option<String>,
+    online_ready: Vec<String>,
+    dictionary_files: Vec<(PathBuf, Option<std::time::SystemTime>, u64)>,
 
     /// 当前学习语言；`None` 为关（不显示译文）。
     learning_language: Option<Language>,

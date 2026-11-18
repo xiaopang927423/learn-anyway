@@ -71,3 +71,7 @@
 | 五笔码表 | 86 五笔极点码表（[sxjudya/rime-wubi86-jidian](https://github.com/sxjudya/rime-wubi86-jidian)，Apache-2.0）；编码来自上游，词频由青简词库按词面回填 |
 
 各许可证原文在 `assets/` 对应目录下。雾凇拼音（GPL）已彻底移除，不要再引入。
+
+## WordMate 联网词库（2026-11-18）
+
+联网源为 [Qingjian 官方词库仓库](https://github.com/qingjian-team/qingjian-dicts)，镜像为同团队 Gitee 仓库。按各本 Release 的版本、manifest 大小与 SHA-256 安装；内置 catalog.json 仅作离线目录展示。当前接入 11 本领域词库（MIT AND CC-BY-SA-4.0）及可选通用扩展（CC-BY-SA-4.0），具体以每本 QJ 元数据和上游 dict.toml 为准。保留文件中的原始来源、署名与许可证。没有重新引入雾凇词库。联网协议参考 Qingjian v0.3.4 的下载实现，代码继续遵守 GPL-3.0-or-later。

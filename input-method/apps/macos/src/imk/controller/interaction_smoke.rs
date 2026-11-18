@@ -927,6 +927,42 @@ pub(crate) fn run() {
         h.engine.set_predictor(Box::new(qingjian_core::NoPredictor));
     });
     navigation::run(&controller, &fixture);
+    host::with(|h| {
+        h.settings.set_bool("dictionaries", "auto_update", false);
+        h.engine.set_input("");
+        h.session.reset(None, Vec::new(), h.page_size, 0);
+        h.reload_dictionaries();
+        let before = h.engine.extra_dictionaries().len();
+        h.engine.set_input("xinghe");
+        let dir = crate::app::paths::dicts_dir().unwrap().join("online");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("qa_domain.qj");
+        qingjian_dictionary::Dictionary::parse("星禾\txing he\t1\n")
+            .unwrap()
+            .write_qj(&file, &Default::default())
+            .unwrap();
+        h.set_domain_enabled("qa_domain", true);
+        h.apply_config(false);
+        h.poll_dictionaries();
+        assert_eq!(
+            h.engine.extra_dictionaries().len(),
+            before,
+            "do not switch dictionaries during composition"
+        );
+        assert_eq!(h.engine.composition().text(), "xinghe");
+        h.engine.set_input("");
+        h.session.reset(None, Vec::new(), h.page_size, 0);
+        h.poll_dictionaries();
+        assert_eq!(
+            h.engine.extra_dictionaries().len(),
+            before + 1,
+            "external download is loaded after composition ends"
+        );
+        std::fs::remove_file(file).unwrap();
+    });
+    println!(
+        "IME_DICTIONARY_RELOAD_OK external file detection and deferred activation preserve active composition"
+    );
     modifiers::set_english_mode(false);
     host::with(|h| {
         h.window.hide();

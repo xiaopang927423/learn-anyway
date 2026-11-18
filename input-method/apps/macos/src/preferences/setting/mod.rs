@@ -20,6 +20,10 @@ pub const MAX_DICTIONARIES: usize = 100;
 /// 设置窗口里的每个控件对应的配置项。编码进控件的 tag，`changed:` 里再解出来。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Setting {
+    DictionaryCheck,
+    DictionaryUpdateEnabled,
+    DictionaryAutoUpdate,
+    DictionaryDownload(usize),
     SentenceConfirmation,
     ConfirmOriginalKeys,
     ConfirmTranslationKeys,
@@ -214,6 +218,10 @@ pub enum Setting {
 impl Setting {
     pub fn tag(self) -> NSInteger {
         match self {
+            Self::DictionaryCheck => 68,
+            Self::DictionaryUpdateEnabled => 69,
+            Self::DictionaryAutoUpdate => 70,
+            Self::DictionaryDownload(i) => 600 + i as NSInteger,
             Self::AuxEnabled => 57,
             Self::AuxShow => 58,
             Self::AuxKeep => 59,
@@ -291,6 +299,10 @@ impl Setting {
 
     pub fn from_tag(tag: NSInteger) -> Option<Self> {
         Some(match tag {
+            68 => Self::DictionaryCheck,
+            69 => Self::DictionaryUpdateEnabled,
+            70 => Self::DictionaryAutoUpdate,
+            600..=699 => Self::DictionaryDownload((tag - 600) as usize),
             57 => Self::AuxEnabled,
             58 => Self::AuxShow,
             59 => Self::AuxKeep,
@@ -383,6 +395,11 @@ mod tests {
     #[test]
     fn tags_round_trip() {
         let all = [
+            Setting::DictionaryCheck,
+            Setting::DictionaryUpdateEnabled,
+            Setting::DictionaryAutoUpdate,
+            Setting::DictionaryDownload(0),
+            Setting::DictionaryDownload(99),
             Setting::SentenceConfirmation,
             Setting::ConfirmOriginalKeys,
             Setting::ConfirmTranslationKeys,

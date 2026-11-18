@@ -16,7 +16,7 @@ WordMate 把中英输入法、网页翻译插件和生词本放在同一套学�
 
 ## 安装与打包
 
-当前 macOS arm64 安装包：`dist/WordMate-0.6.1-macOS-arm64.pkg`，包含桌面应用、输入法和浏览器扩展文件。适用于 Apple Silicon macOS 13+，Python3 需可用。扩展需手动加载；学习数据、配置与用户词条不随包分发。
+当前 macOS arm64 安装包：`dist/WordMate-0.6.2-macOS-arm64.pkg`，包含桌面应用、输入法和浏览器扩展文件。适用于 Apple Silicon macOS 13+，Python3 需可用。扩展需手动加载；学习数据、配置与用户词条不随包分发。
 
 ```sh
 npm --prefix wordmate ci
@@ -52,6 +52,6 @@ WordMate combines bilingual input, a browser translation extension, and a vocabu
 
 The independent repository is **xiaopang927423/learn-anyway**. The Chinese/English introduction page in `website/` includes a controllable 15-step animated walkthrough covering the keyboard, browser extension, vocabulary notebook, review, and spelling practice.
 
-The local installer `WordMate-0.6.1-macOS-arm64.pkg` includes the desktop app, input method, and extension files. It supports Apple Silicon macOS 13+. Installer scripts require Python3. Enable WordMate in macOS Input Sources and load the extension manually. Upgrades preserve study records and personal dictionaries.
+The local installer `WordMate-0.6.2-macOS-arm64.pkg` includes the desktop app, input method, and extension files. It supports Apple Silicon macOS 13+. Installer scripts require Python3. Enable WordMate in macOS Input Sources and load the extension manually. Upgrades preserve study records and personal dictionaries.
 
 Cloud features use your configured OpenAI-compatible model. Input frequency and review scores are separate. Demo animations do not call a model or write study records. Experimental input software still has bugs; keep a system keyboard available. Project license: GPL-3.0, with upstream and third-party notices retained.

@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DictionariesConfig {
+    /// 每天检查并更新已启用的在线词库；关闭后仍可手动检查和下载。
+    pub auto_update: bool,
     /// 打开的随包领域词库（文件名，不含 `.qj`）。
     pub domains: Vec<String>,
 
@@ -21,6 +23,7 @@ pub const DEFAULT_DOMAINS: [&str; 1] = ["idioms"];
 impl Default for DictionariesConfig {
     fn default() -> Self {
         Self {
+            auto_update: true,
             domains: DEFAULT_DOMAINS.iter().map(|s| (*s).to_owned()).collect(),
             disabled: Vec::new(),
         }

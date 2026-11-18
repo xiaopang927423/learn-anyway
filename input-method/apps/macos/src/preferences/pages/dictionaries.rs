@@ -1,144 +1,230 @@
-//! 「词库」页：导入按钮，加一个可滚动的列表，每本一行（勾选框开关 + 非随包的「移除」）。
-
-use std::cell::RefCell;
-
-use objc2::MainThreadMarker;
-use objc2::rc::Retained;
-use objc2_app_kit::{NSScrollView, NSTextField, NSView};
-use objc2_foundation::{NSPoint, NSRect, NSSize};
-
+//! Local, online, and personal dictionaries in one settings page.
 use crate::host::DictionaryInfo;
 use crate::preferences::controls::{
-    GROUP_GAP, NOTE_HEIGHT, button, checkbox, note_full, set_checked, small_label,
+    button, checkbox, note_full, row_checkbox, set_checked, small_label,
 };
 use crate::preferences::layout::{Layout, PAGE_PADDING, PAGE_WIDTH, ROW_HEIGHT};
 use crate::preferences::setting::Setting;
 use crate::preferences::target::PreferencesTarget;
-
-/// 列表里一行的高度。
-const ROW: f64 = ROW_HEIGHT + 6.0;
-
-/// 列表区的最小高度（约放得下 8 本）；窗口更高时撑到页底，装不下的滚。
-const LIST_HEIGHT: f64 = 10.0 * ROW;
-
+use objc2::MainThreadMarker;
+use objc2::rc::Retained;
+use objc2_app_kit::{NSButton, NSScrollView, NSTextField, NSView};
+use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
+use qingjian_platform::Config;
+use std::cell::RefCell;
+const ROW: f64 = 54.0;
+const LIST_HEIGHT: f64 = 6.0 * ROW;
 pub struct DictionariesPage {
-    /// 列表的文档视图，行都加在它上面。
     list: Retained<NSView>,
-
-    /// 装列表的滚动视图。
     scroll: Retained<NSScrollView>,
-
-    /// 当前的行控件，重建时先移除。
     rows: RefCell<Vec<Retained<NSView>>>,
-
-    /// 一本都没有时的提示。
-    empty: Retained<NSTextField>,
-
-    /// 行控件的 target；建行时用。
+    shown: RefCell<Vec<DictionaryInfo>>,
+    actions: RefCell<Vec<Retained<NSButton>>>,
+    check: Retained<NSButton>,
+    update: Retained<NSButton>,
+    auto: Retained<NSButton>,
+    learning: Retained<NSButton>,
+    memory: Retained<NSTextField>,
+    status: Retained<NSTextField>,
     target: Retained<PreferencesTarget>,
-
     mtm: MainThreadMarker,
 }
-
 impl DictionariesPage {
     pub fn build(
         layout: &mut Layout,
         mtm: MainThreadMarker,
         target: &Retained<PreferencesTarget>,
     ) -> Self {
+        let check = button(mtm, "检查词库更新", Setting::DictionaryCheck, target);
+        let update = button(
+            mtm,
+            "更新已启用词库",
+            Setting::DictionaryUpdateEnabled,
+            target,
+        );
         let import = button(mtm, "导入词库…", Setting::ImportDictionary, target);
-        layout.place(&import, PAGE_PADDING, 140.0, ROW_HEIGHT + 4.0);
+        layout.place(&check, PAGE_PADDING, 150.0, ROW_HEIGHT + 4.0);
+        layout.place(&update, PAGE_PADDING + 158.0, 170.0, ROW_HEIGHT + 4.0);
+        layout.place(&import, PAGE_PADDING + 336.0, 140.0, ROW_HEIGHT + 4.0);
         layout.next_row(ROW_HEIGHT + 4.0);
+        let auto = checkbox(
+            mtm,
+            "每天自动检查并更新已启用词库",
+            Setting::DictionaryAutoUpdate,
+            target,
+        );
+        row_checkbox(layout, &auto);
+        let learning = checkbox(
+            mtm,
+            "记住我的选词习惯、人名和常用短语",
+            Setting::Learning,
+            target,
+        );
+        row_checkbox(layout, &learning);
+        let memory = small_label(mtm, "个人记忆保存在本机，联网更新不会覆盖，也不会上传。");
+        layout.place(&memory, PAGE_PADDING, layout.inner_width(), 22.0);
+        layout.next_row(22.0);
+        let status = small_label(mtm, "尚未联网检查");
+        layout.place(&status, PAGE_PADDING, layout.inner_width(), 22.0);
+        layout.next_row(22.0);
         note_full(
             layout,
             mtm,
-            "接受WordMate 输入法 TSV（词、拼音、词频三列）、Rime 的 .dict.yaml 和 .qj 文件，导入后立即可用；勾选框控制开关，「移除」把文件挪到词库目录的 removed 里，不会真删。",
+            "词库来源：Qingjian 官方 GitHub / Gitee。下载后自动启用，更新在本轮输入结束后生效。通用扩展词库较大，部分读音仍待校对，请按需下载。也可导入 TSV、Rime .dict.yaml、.qj。",
         );
-        layout.space(GROUP_GAP);
         let list = NSView::initWithFrame(mtm.alloc(), NSRect::ZERO);
-        // 列表放在滚动视图里：随包 11 本加导入的可能超过一屏，全部列出、可以滚，不再只显示前几本
         let scroll = NSScrollView::initWithFrame(mtm.alloc(), NSRect::ZERO);
         scroll.setHasVerticalScroller(true);
         scroll.setDrawsBackground(false);
         scroll.setDocumentView(Some(&list));
         layout.place_fill(&scroll, PAGE_PADDING, layout.inner_width(), LIST_HEIGHT);
         layout.next_row(LIST_HEIGHT);
-        let empty = small_label(mtm, "还没有附加词库。随包的基础词库不在这里，它一直启用。");
-        list.addSubview(&empty);
-        empty.setFrame(NSRect::new(
-            NSPoint::new(0.0, LIST_HEIGHT - NOTE_HEIGHT),
-            NSSize::new(PAGE_WIDTH - 2.0 * PAGE_PADDING, NOTE_HEIGHT),
-        ));
         Self {
             list,
             scroll,
             rows: RefCell::new(Vec::new()),
-            empty,
+            shown: RefCell::new(Vec::new()),
+            actions: RefCell::new(Vec::new()),
+            check,
+            update,
+            auto,
+            learning,
+            memory,
+            status,
             target: target.clone(),
             mtm,
         }
     }
-
-    /// 按当前词库清单重建列表：每本一行，勾选框（名字 · 条数 · 许可证）+「移除」按钮。
+    pub fn sync(
+        &self,
+        config: &Config,
+        dictionaries: &[DictionaryInfo],
+        status: &str,
+        busy: bool,
+        words: usize,
+    ) {
+        self.rebuild(dictionaries);
+        set_checked(&self.auto, config.dictionaries.auto_update);
+        set_checked(&self.learning, config.general.learning);
+        self.memory.setStringValue(&NSString::from_str(&format!(
+            "个人记忆：{words} 个词 / 短语 · 本机保存 · 不上传 · 更新不会覆盖"
+        )));
+        self.status.setStringValue(&NSString::from_str(status));
+        self.status.setToolTip(Some(&NSString::from_str(status)));
+        self.check.setEnabled(!busy);
+        self.update.setEnabled(!busy);
+        for button in self.actions.borrow().iter() {
+            button.setEnabled(!busy);
+        }
+    }
     pub fn rebuild(&self, dictionaries: &[DictionaryInfo]) {
-        let mtm = self.mtm;
+        if *self.shown.borrow() == dictionaries {
+            return;
+        }
+        *self.shown.borrow_mut() = dictionaries.to_vec();
+        let old_top = self.list.frame().size.height - self.scroll.contentView().bounds().origin.y;
         for view in self.rows.borrow_mut().drain(..) {
             view.removeFromSuperview();
         }
-        self.empty.setHidden(!dictionaries.is_empty());
-        let width = PAGE_WIDTH - 2.0 * PAGE_PADDING;
-        // 文档视图按行数撑高（至少一屏），行从顶部往下排；滚动条要留出位置
-        let visible_height = self.scroll.contentSize().height.max(LIST_HEIGHT);
-        let document_height = (ROW * dictionaries.len() as f64).max(visible_height);
-        let content_width = self.scroll.contentSize().width.min(width);
-        self.list.setFrame(NSRect::new(
-            NSPoint::ZERO,
-            NSSize::new(content_width, document_height),
-        ));
-        self.empty.setFrame(NSRect::new(
-            NSPoint::new(0.0, document_height - NOTE_HEIGHT),
-            NSSize::new(content_width, NOTE_HEIGHT),
-        ));
-        let width = content_width;
+        self.actions.borrow_mut().clear();
+        let height = (ROW * dictionaries.len() as f64)
+            .max(self.scroll.contentSize().height.max(LIST_HEIGHT));
+        let width = self
+            .scroll
+            .contentSize()
+            .width
+            .min(PAGE_WIDTH - 2.0 * PAGE_PADDING);
+        self.list
+            .setFrame(NSRect::new(NSPoint::ZERO, NSSize::new(width, height)));
         let mut rows = self.rows.borrow_mut();
-        for (index, info) in dictionaries.iter().enumerate() {
-            let y = document_height - ROW * (index as f64 + 1.0);
-            let mut title = info.name.clone();
-            if info.broken {
-                title.push_str("（文件损坏）");
+        for (index, info) in dictionaries.iter().take(100).enumerate() {
+            let y = height - ROW * (index as f64 + 1.0);
+            let suffix = if info.broken {
+                " · 未安装或不可用".into()
             } else {
-                title.push_str(&format!(" · {} 条", info.entries));
-                if info.builtin {
-                    title.push_str(" · 随包");
-                } else if !info.license.is_empty() {
-                    title.push_str(&format!(" · {}", info.license));
-                }
-            }
-            let toggle = checkbox(mtm, &title, Setting::DictionaryEnabled(index), &self.target);
+                format!(
+                    " · {} 条 · {}",
+                    info.entries,
+                    if info.enabled {
+                        "已启用"
+                    } else {
+                        "未启用"
+                    }
+                )
+            };
+            let toggle = checkbox(
+                self.mtm,
+                &format!("{}{}", info.name, suffix),
+                Setting::DictionaryEnabled(index),
+                &self.target,
+            );
             set_checked(&toggle, info.enabled);
             toggle.setEnabled(!info.broken);
             toggle.setFrame(NSRect::new(
-                NSPoint::new(0.0, y),
-                NSSize::new(width - 80.0, ROW),
+                NSPoint::new(0.0, y + 24.0),
+                NSSize::new(width - 108.0, 28.0),
             ));
             self.list.addSubview(&toggle);
             rows.push(Retained::into_super(Retained::into_super(toggle)));
-            // 随包词库只能开关，不能移除
-            if !info.builtin {
-                let remove = button(mtm, "移除", Setting::DictionaryRemove(index), &self.target);
-                remove.setFrame(NSRect::new(
-                    NSPoint::new(width - 72.0, y + 1.0),
-                    NSSize::new(72.0, ROW - 2.0),
+            let detail = if info.detail.is_empty() {
+                if info.builtin {
+                    "随包词库"
+                } else {
+                    &info.license
+                }
+            } else {
+                &info.detail
+            };
+            let label = small_label(self.mtm, detail);
+            label.setFrame(NSRect::new(
+                NSPoint::new(22.0, y + 2.0),
+                NSSize::new(width - 30.0, 20.0),
+            ));
+            label.setToolTip(Some(&NSString::from_str(detail)));
+            self.list.addSubview(&label);
+            rows.push(Retained::into_super(Retained::into_super(label)));
+            let action = if info.download_id.is_some() {
+                Some(button(
+                    self.mtm,
+                    &info.download_label,
+                    Setting::DictionaryDownload(index),
+                    &self.target,
+                ))
+            } else if !info.builtin {
+                Some(button(
+                    self.mtm,
+                    "移除",
+                    Setting::DictionaryRemove(index),
+                    &self.target,
+                ))
+            } else {
+                None
+            };
+            if let Some(action) = action {
+                action.setFrame(NSRect::new(
+                    NSPoint::new(width - 102.0, y + 25.0),
+                    NSSize::new(100.0, 26.0),
                 ));
-                self.list.addSubview(&remove);
-                rows.push(Retained::into_super(Retained::into_super(remove)));
+                self.list.addSubview(&action);
+                if info.download_label == "需升级输入法" {
+                    action.setEnabled(false);
+                } else {
+                    self.actions.borrow_mut().push(action.clone());
+                }
+                rows.push(Retained::into_super(Retained::into_super(action)));
             }
         }
-        // 非翻转坐标系的文档视图默认停在底部，滚回顶部让第一本在最上面
         let clip = self.scroll.contentView();
+        let top = if old_top > 0.0 {
+            old_top
+        } else {
+            clip.bounds().size.height
+        };
         clip.scrollToPoint(NSPoint::new(
             0.0,
-            document_height - clip.bounds().size.height,
+            (height - top)
+                .max(0.0)
+                .min((height - clip.bounds().size.height).max(0.0)),
         ));
         self.scroll.reflectScrolledClipView(&clip);
     }

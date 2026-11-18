@@ -47,9 +47,9 @@ impl Engine {
             &mut scored,
             MAX_CANDIDATES,
             |item| {
-                letters
-                    .get(..item.coverage)
-                    .map_or(0, |input| self.learner.choice_weight(input, item.hit.text))
+                letters.get(..item.coverage).map_or(0, |input| {
+                    self.learner.preference_weight(input, item.hit.text)
+                })
             },
             |item| {
                 sentence::transition_log_prob(

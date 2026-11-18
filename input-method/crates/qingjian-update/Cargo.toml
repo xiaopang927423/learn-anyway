@@ -11,6 +11,9 @@ workspace = true
 
 [dependencies]
 qingjian-platform.workspace = true
+qingjian-dictionary.workspace = true
+sha2 = { version = "0.11", default-features = false }
+flate2 = "1.1"
 base64.workspace = true
 ed25519-dalek.workspace = true
 serde.workspace = true

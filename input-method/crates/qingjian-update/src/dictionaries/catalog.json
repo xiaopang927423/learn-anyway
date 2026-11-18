@@ -1,0 +1,221 @@
+{
+  "format": 1,
+  "dicts": [
+    {
+      "id": "domain-animals",
+      "name": "动物词库",
+      "kind": "extra",
+      "language": "zh",
+      "version": "1.0.0",
+      "tag": "domain-animals-v1.0.0",
+      "bytes": 378137,
+      "qj_format": 1,
+      "license": "MIT AND CC-BY-SA-4.0",
+      "description": "动物、鸟类、鱼类与昆虫的名称，约 1.7 万条。",
+      "author": {
+        "name": "青简",
+        "url": "https://qingjian.app"
+      },
+      "machine_generated": "部分：多音字词读音由 LLM 标注",
+      "official": true
+    },
+    {
+      "id": "domain-automotive",
+      "name": "汽车词库",
+      "kind": "extra",
+      "language": "zh",
+      "version": "1.0.0",
+      "tag": "domain-automotive-v1.0.0",
+      "bytes": 38940,
+      "qj_format": 1,
+      "license": "MIT AND CC-BY-SA-4.0",
+      "description": "汽车部件、技术与赛事的说法，约 1600 条。",
+      "author": {
+        "name": "青简",
+        "url": "https://qingjian.app"
+      },
+      "machine_generated": "部分：多音字词读音由 LLM 标注",
+      "official": true
+    },
+    {
+      "id": "domain-finance",
+      "name": "财经词库",
+      "kind": "extra",
+      "language": "zh",
+      "version": "1.0.0",
+      "tag": "domain-finance-v1.0.0",
+      "bytes": 49507,
+      "qj_format": 1,
+      "license": "MIT AND CC-BY-SA-4.0",
+      "description": "股票、银行、公司与金融术语，约 2400 条。",
+      "author": {
+        "name": "青简",
+        "url": "https://qingjian.app"
+      },
+      "machine_generated": "部分：多音字词读音由 LLM 标注",
+      "official": true
+    },
+    {
+      "id": "domain-food",
+      "name": "饮食词库",
+      "kind": "extra",
+      "language": "zh",
+      "version": "1.0.0",
+      "tag": "domain-food-v1.0.0",
+      "bytes": 162942,
+      "qj_format": 1,
+      "license": "MIT AND CC-BY-SA-4.0",
+      "description": "菜名、食材与饮品，约 8200 条。",
+      "author": {
+        "name": "青简",
+        "url": "https://qingjian.app"
+      },
+      "machine_generated": "部分：多音字词读音由 LLM 标注",
+      "official": true
+    },
+    {
+      "id": "domain-historical-figures",
+      "name": "历史人物词库",
+      "kind": "extra",
+      "language": "zh",
+      "version": "1.0.0",
+      "tag": "domain-historical-figures-v1.0.0",
+      "bytes": 187711,
+      "qj_format": 1,
+      "license": "MIT AND CC-BY-SA-4.0",
+      "description": "古今中外人物的名字，约 1.1 万条。",
+      "author": {
+        "name": "青简",
+        "url": "https://qingjian.app"
+      },
+      "machine_generated": "部分：多音字词读音由 LLM 标注",
+      "official": true
+    },
+    {
+      "id": "domain-it-computing",
+      "name": "IT 与计算机词库",
+      "kind": "extra",
+      "language": "zh",
+      "version": "1.0.0",
+      "tag": "domain-it-computing-v1.0.0",
+      "bytes": 215719,
+      "qj_format": 1,
+      "license": "MIT AND CC-BY-SA-4.0",
+      "description": "编程、网络与硬件术语，约 1.2 万条。",
+      "author": {
+        "name": "青简",
+        "url": "https://qingjian.app"
+      },
+      "machine_generated": "部分：多音字词读音由 LLM 标注",
+      "official": true
+    },
+    {
+      "id": "domain-law",
+      "name": "法律词库",
+      "kind": "extra",
+      "language": "zh",
+      "version": "1.0.0",
+      "tag": "domain-law-v1.0.0",
+      "bytes": 170776,
+      "qj_format": 1,
+      "license": "MIT AND CC-BY-SA-4.0",
+      "description": "法律术语、机构与法规名称，约 7000 条。",
+      "author": {
+        "name": "青简",
+        "url": "https://qingjian.app"
+      },
+      "machine_generated": "部分：多音字词读音由 LLM 标注",
+      "official": true
+    },
+    {
+      "id": "domain-medicine",
+      "name": "医学词库",
+      "kind": "extra",
+      "language": "zh",
+      "version": "1.0.0",
+      "tag": "domain-medicine-v1.0.0",
+      "bytes": 327577,
+      "qj_format": 1,
+      "license": "MIT AND CC-BY-SA-4.0",
+      "description": "疾病、症状、药物与检查名称，约 1.6 万条。",
+      "author": {
+        "name": "青简",
+        "url": "https://qingjian.app"
+      },
+      "machine_generated": "部分：多音字词读音由 LLM 标注",
+      "official": true
+    },
+    {
+      "id": "domain-places",
+      "name": "地名词库",
+      "kind": "extra",
+      "language": "zh",
+      "version": "1.0.0",
+      "tag": "domain-places-v1.0.0",
+      "bytes": 696661,
+      "qj_format": 1,
+      "license": "MIT AND CC-BY-SA-4.0",
+      "description": "城市、区县、街道与学校等地名，约 4 万条。",
+      "author": {
+        "name": "青简",
+        "url": "https://qingjian.app"
+      },
+      "machine_generated": "部分：多音字词读音由 LLM 标注",
+      "official": true
+    },
+    {
+      "id": "domain-poetry-lines",
+      "name": "诗词名句词库",
+      "kind": "extra",
+      "language": "zh",
+      "version": "1.0.0",
+      "tag": "domain-poetry-lines-v1.0.0",
+      "bytes": 370747,
+      "qj_format": 1,
+      "license": "MIT AND CC-BY-SA-4.0",
+      "description": "古诗词名句，打拼音出整句，约 1.3 万条。",
+      "author": {
+        "name": "青简",
+        "url": "https://qingjian.app"
+      },
+      "machine_generated": "部分：多音字词读音由 LLM 标注",
+      "official": true
+    },
+    {
+      "id": "domain-idioms",
+      "name": "成语词库",
+      "kind": "extra",
+      "language": "zh",
+      "version": "1.0.0",
+      "tag": "domain-idioms-v1.0.0",
+      "bytes": 86296,
+      "qj_format": 1,
+      "license": "MIT AND CC-BY-SA-4.0",
+      "description": "成语与常用俗语，约 3700 条。",
+      "author": {
+        "name": "青简",
+        "url": "https://qingjian.app"
+      },
+      "machine_generated": "部分：多音字词读音由 LLM 标注",
+      "official": true
+    },
+    {
+      "id": "general",
+      "name": "通用扩展词库",
+      "kind": "extra",
+      "language": "zh",
+      "version": "1.0.1",
+      "tag": "general-v1.0.1",
+      "bytes": 22654704,
+      "qj_format": 1,
+      "license": "CC-BY-SA-4.0",
+      "description": "青简从自有语料挖出的 2～30 字词约 127 万条（基础词库已有的不重复收），排在基础词库之后；仍在持续清洗，部分词形和读音待审核。",
+      "author": {
+        "name": "青简",
+        "url": "https://qingjian.app"
+      },
+      "machine_generated": "词形、读音与权重由机器从语料挖掘和标注，大部分未经人工逐条审核",
+      "official": true
+    }
+  ]
+}

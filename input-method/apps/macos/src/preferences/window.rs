@@ -265,6 +265,18 @@ impl PreferencesWindow {
         self.status.setStringValue(&NSString::from_str(&status));
     }
 
+    pub fn sync_dictionaries(
+        &self,
+        config: &Config,
+        dictionaries: &[DictionaryInfo],
+        status: &str,
+        busy: bool,
+        words: usize,
+    ) {
+        self.dictionaries
+            .sync(config, dictionaries, status, busy, words);
+    }
+
     /// 检查更新的状态变了（查完了、查到新版），只刷「关于」页。
     pub fn sync_update(&self, config: &Config, update: &UpdateStatus) {
         self.about.sync(config, update);

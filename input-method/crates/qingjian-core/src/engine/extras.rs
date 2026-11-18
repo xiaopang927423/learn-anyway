@@ -83,7 +83,7 @@ impl Engine {
         let chosen = items
             .first()
             .filter(|c| c.kind == CandidateKind::Chinese)
-            .map_or(0, |c| self.learner.choice_weight(text, &c.text));
+            .map_or(0, |c| self.learner.preference_weight(text, &c.text));
         let english_weight = word.map_or(0, |w| self.learner.weight(w));
         // 两字母全大写缩写（mp → MP、bm → BM）让中文先：整段太短，几乎总是在打中文。
         // 但**不压过学习记录**：`ok` / `pc` / `ll` 同样满足「两个字母的全大写缩写」，一刀切会把它们一起

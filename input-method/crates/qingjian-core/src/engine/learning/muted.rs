@@ -74,6 +74,10 @@ impl Learner for MutedLearner {
         self.inner.choice_weight(input, text)
     }
 
+    fn preference_weight(&self, input: &str, text: &str) -> u32 {
+        self.inner.preference_weight(input, text)
+    }
+
     fn record_raw(&mut self, input: &str) {
         if !self.muted() {
             self.inner.record_raw(input);

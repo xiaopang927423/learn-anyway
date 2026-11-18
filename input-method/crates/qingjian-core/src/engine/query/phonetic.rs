@@ -144,25 +144,26 @@ impl Engine {
         // `ba` 在「做了」后面出 吧、句首出 把
         let log_total = (self.total_frequency() as f64).max(1.0).ln();
         let letters = choice_key(scope, scope.len());
-        let choice = |item: &Scored<'_>| {
-            // 纠错生效时覆盖的是纠正后的字母，换算回原串再查「这个输入串下选过什么」
-            let covered = correction
-                .as_ref()
-                .map_or(item.coverage, |c| c.edit.to_original(item.coverage));
-            let chosen = letters
-                .get(..covered)
-                .map_or(0, |input| self.learner.choice_weight(input, item.hit.text));
-            // A name learned in full pinyin must also be reachable by initials or
-            // mixed pinyin. Only transfer when all typed syllable positions match.
-            if item.hit.exact {
-                chosen.max(
-                    self.learner
-                        .choice_weight(&item.hit.syllables().collect::<String>(), item.hit.text),
-                )
-            } else {
-                chosen
-            }
-        };
+        let choice =
+            |item: &Scored<'_>| {
+                // 纠错生效时覆盖的是纠正后的字母，换算回原串再查「这个输入串下选过什么」
+                let covered = correction
+                    .as_ref()
+                    .map_or(item.coverage, |c| c.edit.to_original(item.coverage));
+                let chosen = letters.get(..covered).map_or(0, |input| {
+                    self.learner.preference_weight(input, item.hit.text)
+                });
+                // A name learned in full pinyin must also be reachable by initials or
+                // mixed pinyin. Only transfer when all typed syllable positions match.
+                if item.hit.exact {
+                    chosen.max(self.learner.preference_weight(
+                        &item.hit.syllables().collect::<String>(),
+                        item.hit.text,
+                    ))
+                } else {
+                    chosen
+                }
+            };
         ranking::rank_with_choices(&mut scored, MAX_CANDIDATES, choice, |item| {
             let hit = &item.hit;
             sentence::transition_log_prob(

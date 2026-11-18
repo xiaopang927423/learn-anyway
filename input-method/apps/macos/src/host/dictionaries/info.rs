@@ -26,4 +26,8 @@ pub struct DictionaryInfo {
 
     /// 文件读不出来（坏文件）。
     pub broken: bool,
+
+    pub download_id: Option<String>,
+    pub download_label: String,
+    pub detail: String,
 }

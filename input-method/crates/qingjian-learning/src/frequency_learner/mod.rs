@@ -1,4 +1,5 @@
 mod learner_impl;
+mod recent;
 mod tables;
 
 use std::collections::BTreeMap;
@@ -70,6 +71,8 @@ pub struct FrequencyLearner {
 
     /// 按输入串记的选择自上次保存后是否有变化。
     choices_dirty: bool,
+    recent: HashMap<String, std::collections::VecDeque<String>>,
+    recent_dirty: bool,
 
     /// 个人英文词：小写编码 → (第一次敲的写法, 次数)。回车原样上屏的英文词、选过的英文候选。
     english: BTreeMap<String, (String, u32)>,
@@ -151,6 +154,7 @@ impl FrequencyLearner {
             let skipped = learner.load_typos(&source);
             note_skipped(&typos_path, skipped);
         }
+        learner.load_recent(&path)?;
         learner.path = Some(path);
         Ok(learner)
     }
@@ -187,6 +191,7 @@ impl FrequencyLearner {
             || self.words_dirty
             || self.english_dirty
             || self.ngram_dirty
+            || self.recent_dirty
             || self.choices_dirty
             || self.typos_dirty
     }

@@ -4,6 +4,7 @@
 //! 菜单与设置页用 [`Checker::available`] 取要提示的版本。设计与发版侧的签名见 `docs/design/update.md`。
 
 mod checker;
+pub mod dictionaries;
 mod error;
 mod index;
 mod target;

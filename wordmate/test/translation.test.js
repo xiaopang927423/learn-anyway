@@ -129,3 +129,38 @@ test('English cloud completion validates prefixes, removes duplicates and never 
   assert.deepEqual(result,{words:[{text:'developer',syllables:[]}],sentence:null})
  }finally{global.fetch=original}
 })
+
+test('dictionary lookup recovers clover after malformed final JSON, within one shared timeout', async () => {
+ const original=global.fetch;const bodies=[];let signal
+ global.fetch=async(url,options)=>{
+  if(signal)assert.equal(options.signal,signal);signal=options.signal
+  bodies.push(JSON.parse(options.body))
+  return {ok:true,json:async()=>({choices:[{message:{content:bodies.length===1?'clover means 三叶草':JSON.stringify({type:'word',word:'clover',definitions:[{pos:'n.',meaning:'三叶草'}]})}}]})}
+ }
+ try{const r=await ai.translate('clover','',{});assert.equal(r.definitions[0].meaning,'三叶草');assert.equal(r.recovered,true);assert.equal(bodies.length,2);assert.equal(bodies[0].response_format.type,'json_object');assert.ok(bodies[1].max_tokens>bodies[0].max_tokens)}finally{global.fetch=original}
+})
+test('dictionary JSON-mode negotiation supports legacy endpoints without an infinite retry',async()=>{
+ const original=global.fetch;let calls=0
+ global.fetch=async(url,options)=>{calls++;const b=JSON.parse(options.body)
+  if(calls===1){assert.ok(b.response_format);return {ok:false,status:400,text:async()=> 'response_format is not supported'}}
+  assert.equal(b.response_format,undefined)
+  return {ok:true,json:async()=>({choices:[{message:{content:'```json\n{"type":"word","word":"clover","definitions":[{"meaning":"三叶草"}]}\n```'}}]})}
+ }
+ try{assert.equal((await ai.translate('clover','',{})).word,'clover');assert.equal(calls,2)}finally{global.fetch=original}
+})
+test('dictionary truncation and reasoning-only output fail clearly after one retry',async()=>{
+ const original=global.fetch
+ try{for(const choice of [{finish_reason:'length',message:{content:'{"type":"word"'}},{message:{content:'',reasoning_content:'{"definitions":[{"meaning":"do not use"}]}'}}]){
+  let calls=0;global.fetch=async()=>{calls++;return {ok:true,json:async()=>({choices:[choice]})}}
+  await assert.rejects(ai.translate('clover','',{}),/截断|最终结果/);assert.equal(calls,2)
+ }}finally{global.fetch=original}
+})
+test('dictionary rejects empty definition objects and does not retry authorization or refusals',async()=>{
+ const original=global.fetch
+ try{let calls=0;global.fetch=async()=>{calls++;return {ok:true,json:async()=>({choices:[{message:{content:'{"type":"word","definitions":[{}]}'}}]})}}
+  await assert.rejects(ai.translate('clover','',{}),/释义/);assert.equal(calls,2)
+  for(const response of [{ok:false,status:401},{ok:true,json:async()=>({choices:[{message:{refusal:'refused'}}]})}]){
+   calls=0;global.fetch=async()=>{calls++;return response};await assert.rejects(ai.translate('clover','',{}),/401|拒绝/);assert.equal(calls,1)
+  }
+ }finally{global.fetch=original}
+})

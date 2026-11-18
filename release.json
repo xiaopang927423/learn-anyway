@@ -1,9 +1,9 @@
 {
-  "version": "0.6.1",
+  "version": "0.6.2",
   "components": {
-    "desktop": "0.6.1",
-    "extension": "0.6.1",
-    "inputMethod": "0.6.4"
+    "desktop": "0.6.2",
+    "extension": "0.6.2",
+    "inputMethod": "0.6.5"
   },
-  "inputMethodBuild": "6040"
+  "inputMethodBuild": "6050"
 }

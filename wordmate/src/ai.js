@@ -43,37 +43,50 @@ function thinkingOptions(settings) {
 
 async function translate(text, context, settings) {
   const base = (settings.baseUrl || DEFAULT_BASE).trim().replace(/\/+$/, '')
+  const signal = AbortSignal.timeout(45000)
   let user = `请处理：${text}`
   if (context) user += `\n上下文句子：${context}\n请结合这个语境给出最贴切的结果。`
-
-  const res = await fetch(`${base}/chat/completions`, {
-    signal: AbortSignal.timeout(45000),
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${settings.apiKey}`,
-    },
-    body: JSON.stringify({
-      ...thinkingOptions(settings),
-      model: settings.model || 'qwen-turbo',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: user },
-      ],
-      temperature: settings.model === 'diffu' ? 0 : 0.3,
-    }),
-  })
-
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`API ${res.status}: ${body.slice(0, 200)}`)
+  let jsonMode = true, repaired = false
+  // At most one format retry plus one negotiation for older compatible endpoints.
+  for (let request = 0; request < 3; request++) {
+    try {
+      const res = await fetch(`${base}/chat/completions`, {
+        signal, method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
+        body: JSON.stringify({
+          ...thinkingOptions(settings), model: settings.model || 'qwen-turbo',
+          ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+          max_tokens: repaired ? 4096 : 3072,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT + (repaired ? '\n上次回复格式不完整。这次直接返回完整 JSON，释义和例句简洁，省略非必要附加字段，不输出思考。' : '') },
+            { role: 'user', content: user },
+          ],
+          temperature: settings.model === 'diffu' ? 0 : 0.3,
+        }),
+      })
+      if (!res.ok) {
+        const body = typeof res.text === 'function' ? await res.text() : ''
+        if (jsonMode && [400, 422].includes(res.status) && /response_format|json_object|json mode/i.test(body)) {
+          jsonMode = false
+          continue
+        }
+        throw new Error(`翻译接口返回 HTTP ${res.status}`)
+      }
+      let data
+      try { data = await res.json() } catch { throw new ResponseFormatError('模型接口返回非 JSON 响应') }
+      if (data?.choices?.[0]?.finish_reason === 'length') throw new ResponseFormatError('模型输出被截断，词典结果不完整')
+      const content = answerText(data)
+      if (!content.trim()) throw new ResponseFormatError('模型未返回最终结果（可能只返回了推理内容）')
+      const parsed = extractJSON(content)
+      try { validate(parsed, text) } catch (error) { throw new ResponseFormatError(error.message) }
+      return { ...parsed, ...(repaired ? { recovered: true } : {}) }
+    } catch (error) {
+      if (signal.aborted) throw new Error('翻译请求超时（45秒），请重试')
+      if (!(error instanceof ResponseFormatError) || repaired || request === 2) throw error
+      repaired = true
+    }
   }
-
-  const data = await res.json()
-  const content = answerText(data)
-  const parsed = extractJSON(content)
-  validate(parsed, text)
-  return parsed
+  throw new Error('当前模型不支持词典输出格式，请更换模型或重试')
 }
 
 function answerText(data) {
@@ -133,7 +146,10 @@ function validate(parsed, original) {
   if (Array.isArray(parsed.definitions) && parsed.definitions.length > 0) {
     parsed.type = parsed.type || 'word'
     parsed.word = parsed.word || original
-    if (parsed.forms && typeof parsed.forms === 'object') {
+    parsed.definitions = parsed.definitions.filter(x => typeof x.meaning === 'string' && x.meaning.trim())
+    if (!parsed.definitions.length) throw new Error('AI 返回缺少有效释义')
+    parsed.type = 'word'
+    if (parsed.forms && typeof parsed.forms === 'object' && !Array.isArray(parsed.forms)) {
       // 只保留非空字符串的词形变化，防止 AI 返回 null/嵌套等脏数据
       for (const k of Object.keys(parsed.forms)) {
         if (typeof parsed.forms[k] !== 'string' || !parsed.forms[k].trim()) delete parsed.forms[k]

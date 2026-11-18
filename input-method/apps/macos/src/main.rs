@@ -202,7 +202,10 @@ fn main() {
     }
     // A direct settings entry point; no competing IMK server for a settings-only process.
     if args.iter().any(|a| a == "--preferences") {
-        host::with(|h| h.preferences.show());
+        host::with(|h| {
+            h.watch.start();
+            h.preferences.show();
+        });
         NSApplication::sharedApplication(mtm).run();
         return;
     }

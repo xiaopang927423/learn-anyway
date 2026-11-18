@@ -204,7 +204,7 @@ fn saving_is_atomic_and_leaves_no_temporary_files() {
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
-    assert_eq!(names.len(), 6, "{names:?}");
+    assert_eq!(names.len(), 7, "{names:?}");
     assert!(names.iter().all(|name| !name.contains(".tmp")), "{names:?}");
     std::fs::remove_dir_all(dir).unwrap();
 }
@@ -702,4 +702,52 @@ fn replacing_an_abbreviated_name_retracts_its_full_reading_preference() {
     engine.commit(&replacement);
     assert_eq!(engine.learner().choice_weight("zyx", "张宇萱"), 0);
     assert_eq!(engine.learner().choice_weight("zhangyuxuan", "张宇萱"), 0);
+}
+
+#[test]
+fn recent_habits_overtake_old_counts_and_survive_restart() {
+    use qingjian_core::Engine;
+    let dir = std::env::temp_dir().join(format!("wordmate-recent-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("user.tsv");
+    let mut learner = FrequencyLearner::from_path(&path).unwrap();
+    for _ in 0..1000 {
+        learner.record_choice("xinghe", "星河");
+    }
+    for _ in 0..10 {
+        learner.record_choice("xinghe", "星禾");
+    }
+    assert_eq!(learner.choice_weight("xinghe", "星河"), 1000);
+    assert!(
+        learner.preference_weight("xinghe", "星禾") > learner.preference_weight("xinghe", "星河")
+    );
+    learner.flush();
+    let reopened = FrequencyLearner::from_path(&path).unwrap();
+    assert_eq!(
+        reopened.preference_weight("xinghe", "星禾"),
+        learner.preference_weight("xinghe", "星禾")
+    );
+    let mut engine =
+        Engine::new(Dictionary::parse("星河\txing he\t90000\n星禾\txing he\t1\n").unwrap())
+            .with_learner(Box::new(reopened));
+    engine.set_input("xinghe");
+    assert_eq!(engine.query().unwrap().candidates.items[0].text, "星禾");
+    engine.set_extra_dictionaries(vec![Dictionary::parse("星河\txing he\t999999\n").unwrap()]);
+    engine.set_input("xinghe");
+    assert_eq!(engine.query().unwrap().candidates.items[0].text, "星禾");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn undo_and_forget_remove_recent_preferences() {
+    let mut learner = FrequencyLearner::default();
+    learner.record_choice("xinghe", "星河");
+    let before = learner.preference_weight("xinghe", "星河");
+    learner.record_choice("xinghe", "星河");
+    learner.unrecord_choice("xinghe", "星河");
+    assert_eq!(learner.preference_weight("xinghe", "星河"), before);
+    learner.forget("星河");
+    assert_eq!(learner.preference_weight("xinghe", "星河"), 0);
+    assert!(learner.recent.is_empty());
 }

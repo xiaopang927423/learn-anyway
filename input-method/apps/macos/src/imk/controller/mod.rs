@@ -163,7 +163,7 @@ define_class!(
                     h.end_translation();
                     h.window.hide();
                     h.indicator.deactivate();
-                    h.watch.stop();
+                    if !h.dictionary_work_pending() { h.watch.stop(); }
                     h.engine.break_chain();
                     h.engine.flush_learning();
                     h.last_flush = std::time::Instant::now();
@@ -174,7 +174,7 @@ define_class!(
                 // 善后里没做的收尾：学习数据还是要落盘
                 host::with(|h| {
                     h.indicator.deactivate();
-                    h.watch.stop();
+                    if !h.dictionary_work_pending() { h.watch.stop(); }
                     h.engine.flush_learning();
                 });
             }

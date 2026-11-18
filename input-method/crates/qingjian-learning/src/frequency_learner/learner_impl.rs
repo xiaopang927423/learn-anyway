@@ -4,7 +4,8 @@ use super::*;
 
 impl Learner for FrequencyLearner {
     fn record(&mut self, candidate: &Candidate) {
-        *self.counts.entry(candidate.text.clone()).or_default() += 1;
+        let count = self.counts.entry(candidate.text.clone()).or_default();
+        *count = count.saturating_add(1);
         self.dirty = true;
         tracing::debug!(text = %candidate.text, "记录用户选择");
     }
@@ -31,6 +32,7 @@ impl Learner for FrequencyLearner {
             .or_default()
             .entry(text.to_owned())
             .or_default() += 1;
+        self.note_recent(input, text);
         self.choices_dirty = true;
         if self.choice_count() > MAX_CHOICE_ENTRIES {
             self.decay_choices();
@@ -44,6 +46,10 @@ impl Learner for FrequencyLearner {
             .and_then(|texts| texts.get(text))
             .copied()
             .unwrap_or(0)
+    }
+
+    fn preference_weight(&self, input: &str, text: &str) -> u32 {
+        self.recent_weight(input, text)
     }
 
     fn record_raw(&mut self, input: &str) {
@@ -62,6 +68,7 @@ impl Learner for FrequencyLearner {
     }
 
     fn unrecord_choice(&mut self, input: &str, text: &str) {
+        self.undo_recent(input, text);
         let Some(texts) = self.choices.get_mut(input) else {
             return;
         };
@@ -174,6 +181,7 @@ impl Learner for FrequencyLearner {
     }
 
     fn forget(&mut self, text: &str) -> Forgotten {
+        self.forget_recent(text);
         let mut forgotten = Forgotten::default();
         if self.words.remove(text).is_some() {
             forgotten.user_word = true;
@@ -218,6 +226,9 @@ impl Learner for FrequencyLearner {
         let Some(path) = self.path.clone() else {
             return;
         };
+        if let Err(error) = self.save_recent(&path) {
+            tracing::warn!(%error, "近期选词保存失败");
+        }
         if self.dirty {
             match self.save_to(&path) {
                 Ok(()) => {

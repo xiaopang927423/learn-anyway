@@ -32,7 +32,9 @@ pub fn import(source: &Path, dest_dir: &Path) -> Result<Imported, DictionaryErro
         let metadata = dictionary.metadata().cloned().unwrap_or_default();
         (dictionary, metadata)
     } else {
-        let text = std::fs::read_to_string(source)?;
+        let text = std::fs::read_to_string(source)?
+            .trim_start_matches('\u{feff}')
+            .to_owned();
         let (tsv, name) = if rime::looks_like_rime(&text) {
             let parsed = rime::to_tsv(&text);
             (parsed.tsv, parsed.name)
@@ -52,7 +54,24 @@ pub fn import(source: &Path, dest_dir: &Path) -> Result<Imported, DictionaryErro
             "no usable entries; expected word and explicit pinyin columns",
         ));
     }
-    dictionary.write_qj(&target, &metadata)?;
+    // Never truncate a file currently mmap'ed by the input engine.
+    let pending = dest_dir.join(format!(
+        ".{stem}-{}-{}.pending",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    let written = dictionary.write_qj(&pending, &metadata).and_then(|()| {
+        std::fs::File::open(&pending)?.sync_all()?;
+        std::fs::rename(&pending, &target)?;
+        Ok(())
+    });
+    if let Err(error) = written {
+        let _ = std::fs::remove_file(&pending);
+        return Err(error);
+    }
     Ok(Imported {
         path: target,
         name: metadata.name,
@@ -119,5 +138,27 @@ mod tests {
         assert_eq!(strip_extensions("dict.tsv"), "dict");
         assert_eq!(strip_extensions("x.qj"), "x");
         assert_eq!(strip_extensions("noext"), "noext");
+    }
+    #[test]
+    fn bom_rime_import_and_reimport_keep_live_mapping_valid() {
+        let root = std::env::temp_dir().join(format!("wordmate-bom-import-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("names.dict.yaml");
+        let dir = root.join("dicts");
+        std::fs::write(&source, "\u{feff}---\nname: names\n...\n星河\txing he\t3\n").unwrap();
+        let first = import(&source, &dir).unwrap();
+        let mapped = Dictionary::from_path(&first.path).unwrap();
+        std::fs::write(&source, "---\nname: names\n...\n星禾\txing he\t4\n").unwrap();
+        import(&source, &dir).unwrap();
+        assert_eq!(mapped.lookup(&["xing", "he"], false)[0].text, "星河");
+        assert_eq!(
+            Dictionary::from_path(&first.path)
+                .unwrap()
+                .lookup(&["xing", "he"], false)[0]
+                .text,
+            "星禾"
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

@@ -73,6 +73,8 @@ impl Host {
                     &self.engine.vocabulary_summary(),
                     self.learning_language,
                 );
+                self.watch.start();
+                self.sync_dictionary_page();
                 self.preferences.show();
             }
             MenuAction::OpenLogs => {
@@ -392,6 +394,21 @@ impl Host {
                     "delete_candidate",
                     defaults.delete_candidate.key(),
                 );
+            }
+            (Setting::DictionaryAutoUpdate, SettingValue::Bool(on)) => {
+                self.settings.set_bool("dictionaries", "auto_update", on);
+            }
+            (Setting::DictionaryCheck, _) => {
+                self.check_dictionaries(false);
+                return;
+            }
+            (Setting::DictionaryUpdateEnabled, _) => {
+                self.check_dictionaries(true);
+                return;
+            }
+            (Setting::DictionaryDownload(index), _) => {
+                self.download_dictionary(index);
+                return;
             }
             (Setting::DictionaryEnabled(index), SettingValue::Bool(on)) => {
                 if let Some(info) = self.dictionary_list.get(index).cloned() {

@@ -87,7 +87,11 @@ impl Host {
             self.applied_predict = config.predict.clone();
         }
         if force || config.dictionaries != self.applied_dictionaries {
-            self.reload_dictionaries();
+            if force || (self.engine.composition().is_empty() && self.session.preedit.is_none()) {
+                self.reload_dictionaries();
+            } else {
+                self.online_pending = true;
+            }
         }
         if self.applied_model.as_ref() != Some(&config.model) {
             if config.model.enabled {
@@ -116,6 +120,7 @@ impl Host {
             &self.update_status,
         );
         self.sync_update();
+        self.sync_dictionary_page();
     }
 
     /// 配置里的自定义短语，`[general] system_text_replacements` 开着时再并上系统的文本替换，一起推给 Engine。
@@ -213,6 +218,7 @@ impl Host {
     }
 
     pub fn tick(&mut self) {
+        self.poll_dictionaries();
         self.reload_config_if_changed();
         let learned = self.engine.poll_glosses();
         if learned > 0 {

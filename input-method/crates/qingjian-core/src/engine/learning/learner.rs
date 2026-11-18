@@ -27,6 +27,11 @@ pub trait Learner: Send {
         0
     }
 
+    /// 排序偏好：可结合近期选择；原始次数继续用于撤销和诊断。
+    fn preference_weight(&self, input: &str, text: &str) -> u32 {
+        self.choice_weight(input, text)
+    }
+
     /// 用户对输入串 `input` 按了回车原样上屏，而当时拼写纠错正生效：这个串就是要原样打的，以后不纠。
     fn record_raw(&mut self, _input: &str) {}
 
