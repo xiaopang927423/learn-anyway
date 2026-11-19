@@ -4,8 +4,8 @@ const { commitLearning } = require('./ime-learning')
 const MAX_FRAME = 65536
 function frame(data) { const body = Buffer.from(JSON.stringify(data)); const header = Buffer.alloc(4); header.writeUInt32LE(body.length); return Buffer.concat([header, body]) }
 function preferences(settings) {
-  const relevant = [settings.imeEnabled, settings.imeAutoAdd, settings.imeSaveContext, settings.thinkingEnabled, settings.thinkingParameter, settings.model, settings.baseUrl]
-  return { revision: parseInt(crypto.createHash('sha256').update(JSON.stringify(relevant)).digest('hex').slice(0, 12), 16), learningLanguage: 'en', enabled: settings.imeEnabled, autoAdd: settings.autoAdd && settings.imeAutoAdd, saveContext: settings.imeSaveContext, thinkingEnabled: settings.thinkingEnabled, model: settings.model }
+  const relevant = [settings.imeEnabled, settings.imeGrammarEnabled, settings.imeAutoAdd, settings.imeSaveContext, settings.thinkingEnabled, settings.thinkingParameter, settings.model, settings.baseUrl]
+  return { revision: parseInt(crypto.createHash('sha256').update(JSON.stringify(relevant)).digest('hex').slice(0, 12), 16), learningLanguage: 'en', enabled: settings.imeEnabled, grammarEnabled: settings.imeGrammarEnabled !== false, autoAdd: settings.autoAdd && settings.imeAutoAdd, saveContext: settings.imeSaveContext, thinkingEnabled: settings.thinkingEnabled, model: settings.model }
 }
 async function startImeBridge(userData, db, changed = () => {}) {
   const socketPath = path.join(userData, 'ime.sock')
@@ -59,7 +59,7 @@ async function startImeBridge(userData, db, changed = () => {}) {
             const expected = Buffer.from(token)
             if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) throw Object.assign(new Error('未授权连接'), { code: 'UNAUTHORIZED' })
             authorized = true
-            return { serverInstanceId: instance, capabilities: ['preview.fragment', 'preview.selection', 'learning.commit', 'preferences.get', 'prediction.query'], protocolVersion: 1 }
+            return { serverInstanceId: instance, capabilities: ['preview.fragment', 'preview.selection', 'learning.commit', 'preferences.get', 'prediction.query', 'grammar.check'], protocolVersion: 1 }
           }
           if (!authorized) throw Object.assign(new Error('请先完成握手'), { code: 'UNAUTHORIZED' })
           switch (message.method) {
@@ -67,6 +67,15 @@ async function startImeBridge(userData, db, changed = () => {}) {
             case 'health': return { serverInstanceId: instance, status: 'ready' }
             case 'preview.fragment': return service.preview(p, false, controller.signal)
             case 'preview.selection': return service.preview(p, true, controller.signal)
+            case 'grammar.check': {
+              const settings = db.getSettings(), revision = preferences(settings).revision
+              if (!settings.imeEnabled || settings.imeGrammarEnabled === false || !settings.apiKey) throw Object.assign(new Error('请开启英文语法检查'), {code:'NOT_CONFIGURED'})
+              if (typeof p.text !== 'string' || p.text.length > 1000 || !/[A-Za-z]+\s+[A-Za-z]+/.test(p.text) || /[\u3400-\u9fff]/.test(p.text)) throw Object.assign(new Error('待检查句子无效'), {code:'INVALID_INPUT'})
+              const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(30000)])
+              const result = await require('./model-request-queue').modelQueue.run('lookup', () => require('./ai').reviewSentence(p.text, '', settings, signal), {signal,deadline:Date.now()+30000})
+              if (revision !== preferences(db.getSettings()).revision) throw Object.assign(new Error('设置已更改'), {code:'NOT_CONFIGURED'})
+              return result
+            }
             case 'prediction.query': {
               const settings = db.getSettings()
               if (!settings.imeEnabled || !settings.apiKey) throw Object.assign(new Error('请开启 WordMate 云辅助'), {code:'NOT_CONFIGURED'})

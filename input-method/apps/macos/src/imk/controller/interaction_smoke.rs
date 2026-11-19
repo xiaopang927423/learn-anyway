@@ -68,6 +68,18 @@ pub(crate) fn run() {
     let controller: Retained<WordMateInputController> =
         unsafe { msg_send![super(allocated), init] };
     let client = TextClient::new(object);
+    let digit = NSString::from_str("7");
+    let handled: bool = unsafe { msg_send![&*controller, inputText: &*digit, key: 26isize, modifiers: 0usize, client: object] };
+    assert!(handled);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "7");
+    let digit = NSString::from_str("8");
+    let handled: bool = unsafe { msg_send![&*controller, inputText: &*digit, client: object] };
+    assert!(handled);
+    assert_eq!(&*fixture.ivars().committed.borrow(), "8");
+    fixture.ivars().committed.borrow_mut().clear();
+    fixture.ivars().writes.borrow_mut().clear();
+    fixture.ivars().cursor.set(0);
+    fixture.ivars().inserts.set(0);
     let event = |characters: &str, code: u16, flags: NSEventModifierFlags| {
         let string = NSString::from_str(characters);
         let event = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
@@ -704,8 +716,8 @@ pub(crate) fn run() {
         "bre ",
         "Space must not silently take a completion"
     );
-    // Confirm the literal prefix before entering identifier digits: visible 1–9
-    // now select candidates, while digits without a composition pass through.
+    // English digits are inserted explicitly, including callbacks without a
+    // physical key code. Chrome must not be asked to recreate missing text.
     for c in "foo".chars() {
         event(&c.to_string(), 0, none);
     }
@@ -718,7 +730,8 @@ pub(crate) fn run() {
         controller.dispatch_event(&e, client)
     };
     for c in "123".chars() {
-        assert!(!returned(&c.to_string(), 0, none));
+        assert!(returned(&c.to_string(), 0, none));
+        assert_eq!(*fixture.ivars().committed.borrow(), c.to_string());
     }
     host::with(|h| assert!(h.engine.composition().is_empty()));
     assert!(
@@ -799,10 +812,11 @@ pub(crate) fn run() {
         !modifiers::english_mode(),
         "Shift down alone must not switch yet"
     );
+    unsafe { let _: () = msg_send![&*controller, commitComposition: object]; }
     shift_event(56, none);
     assert!(
         modifiers::english_mode(),
-        "Shift tap release switches to English"
+        "Shift tap survives host commitComposition between down/up"
     );
     shift_event(56, none);
     assert!(
@@ -963,6 +977,28 @@ pub(crate) fn run() {
     println!(
         "IME_DICTIONARY_RELOAD_OK external file detection and deferred activation preserve active composition"
     );
+    modifiers::set_english_mode(true);
+    let original = "She go to school.";
+    let corrected = "She goes to school.";
+    for stale in [false, true] {
+        let actual = if stale { "She go to office." } else { original };
+        *fixture.ivars().committed.borrow_mut() = actual.into();
+        fixture.ivars().cursor.set(original.len());
+        fixture.ivars().selection_length.set(0);
+        fixture.ivars().marked.borrow_mut().clear();
+        host::with(|h| {
+            h.assistant.draft.clear(); h.assistant.draft_cursor = None;
+            h.engine.clear(); h.end_translation(); h.grammar.cancel();
+            h.active_input = Some((controller.clone(), unsafe { Retained::retain(client.object_ptr().cast_mut()).unwrap() }));
+            h.grammar.snapshot = Some(crate::grammar::Snapshot { source: original.into(), range: NSRange::new(0, original.len()), caret: original.len() });
+            h.grammar.result = Some(serde_json::json!({"grammar":{"corrected":corrected}}));
+        });
+        let inserts = fixture.ivars().inserts.get();
+        WordMateInputController::apply_grammar();
+        assert_eq!(fixture.ivars().inserts.get(), inserts + usize::from(!stale));
+        assert_eq!(fixture.ivars().committed.borrow().as_str(), if stale { actual } else { corrected });
+    }
+    println!("IME_GRAMMAR_OK explicit correction verifies original host range and rejects changed text (mock IMK)");
     modifiers::set_english_mode(false);
     host::with(|h| {
         h.window.hide();

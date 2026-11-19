@@ -29,6 +29,19 @@
 }
 
 * { box-sizing: border-box; }
+.lookup-mode { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; color: var(--muted); }
+.lookup-mode select { flex: 1; padding: 7px; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.grammar-card { margin: 18px 0; padding: 14px; border: 1px solid var(--border); border-radius: 12px; }
+.grammar-card h3, .grammar-card h4 { margin: 4px 0 10px; }
+.grammar-original, .grammar-corrected { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; line-height: 1.8; }
+.grammar-original mark { color: inherit; border-radius: 3px; padding: 2px 0; }
+.grammar-error { background: #e34f5025; text-decoration: underline wavy #d33; text-underline-offset: 4px; }
+.grammar-suggestion { background: #e9a23b25; text-decoration: underline dotted #b27a14; text-underline-offset: 4px; }
+.grammar-corrected { background: #28a86612; padding: 10px; border-radius: 8px; }
+.grammar-issues { padding-left: 20px; }
+.grammar-issues li { padding: 10px 0; border-top: 1px solid var(--border); }
+.grammar-issues p { margin: 5px 0; overflow-wrap: anywhere; }
+.grammar-tag { font-size: 12px; color: var(--muted); }
 
 body {
   margin: 0;

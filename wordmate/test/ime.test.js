@@ -104,3 +104,23 @@ test('Preference fingerprint changes when model or privacy settings change',()=>
   const a=preferences({imeEnabled:true,model:'diffu'}),b=preferences({imeEnabled:true,model:'other'})
   assert.notEqual(a.revision,b.revision)
 })
+test('Grammar RPC checks opt-out, settings changes and never writes a learning record', async () => {
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'wm-grammar-'))
+  const settings={imeEnabled:true,imeGrammarEnabled:false,apiKey:'test',model:'fixture'}
+  let calls=0,release
+  const original=ai.reviewSentence
+  ai.reviewSentence=async text=>{calls++;await new Promise(r=>{release=r});return {original:text,grammar:{status:'ok',issues:[]}}}
+  const server=await startImeBridge(directory,{getSettings:()=>settings,commitImeLearning:()=>{throw new Error('Grammar must not learn')}})
+  const c=connection(path.join(directory,'ime.sock'))
+  try {
+    await c.request('hello',{authToken:fs.readFileSync(path.join(directory,'ime-token'),'utf8')})
+    assert.equal((await c.request('grammar.check',{text:'She go to school.'})).error.code,'NOT_CONFIGURED');assert.equal(calls,0)
+    const old=preferences(settings).revision;settings.imeGrammarEnabled=true
+    assert.notEqual(old,preferences(settings).revision)
+    assert.equal((await c.request('grammar.check',{text:'密码'})).error.code,'INVALID_INPUT')
+    const pending=c.request('grammar.check',{text:'She go to school.'})
+    while(!release) await new Promise(r=>setImmediate(r))
+    settings.imeGrammarEnabled=false;release()
+    assert.equal((await pending).error.code,'NOT_CONFIGURED')
+  } finally {ai.reviewSentence=original;c.socket.destroy();await new Promise(r=>server.dispose(r));fs.rmSync(directory,{recursive:true,force:true})}
+})

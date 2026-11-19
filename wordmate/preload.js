@@ -6,7 +6,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('wm', {
   // 查词
-  lookup: (word, context) => ipcRenderer.invoke('lookup:query', word, context),
+  lookup: (word, context, mode = 'auto') => ipcRenderer.invoke('lookup:query', word, context, mode),
   // 生词本
   addToNotebook: (payload) => ipcRenderer.invoke('notebook:add', payload),
   listWords: () => ipcRenderer.invoke('notebook:list'),

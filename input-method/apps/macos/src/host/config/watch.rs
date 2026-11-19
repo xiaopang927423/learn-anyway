@@ -64,7 +64,11 @@ define_class!(
                 h.poll_assistant();
                 let step=self.ivars().get();self.ivars().set((step+1)%20);
                 if step==0 {h.tick();}
-            }).map(|_| crate::imk::WordMateInputController::poll_adoption())).is_none() {
+            }).map(|_| {
+                crate::imk::WordMateInputController::poll_adoption();
+                crate::imk::WordMateInputController::poll_shift();
+                crate::imk::WordMateInputController::poll_grammar();
+            })).is_none() {
                 crate::imk::recover_from_panic(None);
             }
         }

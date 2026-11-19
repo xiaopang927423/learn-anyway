@@ -7,17 +7,19 @@ p.add_argument('--output',type=pathlib.Path,default=ROOT/'dist')
 a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
 subprocess.run(['python3',str(ROOT/'scripts/versions.py')],check=True)
 release=json.loads((ROOT/'release.json').read_text());release_version=release['version']
-desktop=ROOT/'wordmate/dist/mac-arm64/WordMate.app'
-ime=ROOT/'input-method/bundle/WordMateInput.app'
+desktop=ROOT/'wordmate/dist/build.noindex/mac-arm64/WordMate.app'
+ime=ROOT/'input-method/bundle/build.noindex/WordMateInput.app'
 for app,identity in [(desktop,'com.qiji.wordmate'),(ime,'com.qiji.wordmate.inputmethod')]:
     if not app.is_dir():raise SystemExit('Build first: '+str(app))
     info=plistlib.loads((app/'Contents/Info.plist').read_bytes())
     if info.get('CFBundleIdentifier')!=identity:raise SystemExit('Unexpected bundle identity')
 if plistlib.loads((ime/'Contents/Info.plist').read_bytes())['CFBundleShortVersionString']!=release['components']['inputMethod']:raise SystemExit('Stale IME build')
+if str(plistlib.loads((ime/'Contents/Info.plist').read_bytes())['CFBundleVersion'])!=release['inputMethodBuild']:raise SystemExit('Stale IME build number')
 if plistlib.loads((desktop/'Contents/Info.plist').read_bytes())['CFBundleShortVersionString']!=release_version:raise SystemExit('Stale desktop build')
-subprocess.run(['/usr/bin/codesign','--verify','--strict',str(ime)],check=True)
+for app in [desktop, ime]:
+    subprocess.run(['/usr/bin/codesign','--verify','--deep','--strict',str(app)],check=True)
 # Inspect the exact packaged backend, not just its version label.
-subprocess.run(['node','-e',"const a=require('@electron/asar'),p=process.argv[1];const b=a.extractFile(p,'src/ime-bridge.js').toString(),m=a.extractFile(p,'main.js').toString();if(!b.includes(\"'english'\")||!m.includes('startImeBridge'))process.exit(1)",str(desktop/'Contents/Resources/app.asar')],cwd=ROOT/'wordmate',check=True)
+subprocess.run(['node','-e',"const a=require('@electron/asar'),p=process.argv[1];const b=a.extractFile(p,'src/ime-bridge.js').toString(),m=a.extractFile(p,'main.js').toString();if(!b.includes(\"'english'\")||!b.includes('grammar.check')||!m.includes('startImeBridge'))process.exit(1);a.extractFile(p,'src/sentence-review.js')",str(desktop/'Contents/Resources/app.asar')],cwd=ROOT/'wordmate',check=True)
 with tempfile.TemporaryDirectory(prefix='wordmate-local-product-') as directory:
     work=pathlib.Path(directory);payload=work/'payload'
     for src,relative in [(desktop,'Applications/WordMate.app'),(ime,'Library/Input Methods/WordMateInput.app')]:
@@ -58,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix='wordmate-local-product-') as directory:
 sha=hashlib.sha256(package.read_bytes()).hexdigest()
 source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
 source_dirty=bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],cwd=ROOT,text=True).strip())
-(out/(package.name+'.release.json')).write_text(json.dumps({'version':release_version,'components':release['components'],'sourceCommit':source_commit,'sourceDirty':source_dirty,'file':package.name,'bytes':package.stat().st_size,'sha256':sha},ensure_ascii=False,indent=2)+'\n')
+(out/(package.name+'.release.json')).write_text(json.dumps({'version':release_version,'components':release['components'],'inputMethodBuild':release['inputMethodBuild'],'sourceCommit':source_commit,'sourceDirty':source_dirty,'file':package.name,'bytes':package.stat().st_size,'sha256':sha},ensure_ascii=False,indent=2)+'\n')
 shutil.copy2(out/(package.name+'.release.json'),out/'current-release.json')
 (out/(package.name+'.sha256')).write_text(sha+'  '+package.name+'\n')
 shutil.copy2(ROOT/'docs/测试目录/本地安装包使用说明.md',out/'WordMate-安装说明.md')

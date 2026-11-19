@@ -152,23 +152,28 @@ pub(super) fn run(controller: &WordMateInputController, fixture: &FixtureClient)
         "English paging submitted raw input"
     );
     event("", 121, none);
-    let expected = selected();
     event("", 18, none);
-    assert_eq!(
-        *fixture.ivars().committed.borrow(),
-        expected,
-        "English physical digit must select a candidate"
-    );
-    for c in "de".chars() {
-        event(&c.to_string(), 0, none);
-    }
-    let expected = host::with(|h| h.session.candidate(1).unwrap().text).unwrap();
+    event(" ", 49, none);
+    assert_eq!(*fixture.ivars().committed.borrow(), "de1 ");
+    for c in "de".chars() { event(&c.to_string(), 0, none); }
     assert!(controller.handle_text("2", client));
-    assert_eq!(
-        *fixture.ivars().committed.borrow(),
-        expected,
-        "text callback must also select"
-    );
+    event(" ", 49, none);
+    assert_eq!(*fixture.ivars().committed.borrow(), "de2 ");
+
+    // Chrome/Electron IMK events can omit characters. Explicit insertion must
+    // work in both modes for every top-row and keypad digit, including zero.
+    for english in [false, true] {
+        reset(controller, fixture);
+        modifiers::set_english_mode(english);
+        for (digit, key, pad) in [(0,29,82),(1,18,83),(2,19,84),(3,20,85),(4,21,86),(5,23,87),(6,22,88),(7,26,89),(8,28,91),(9,25,92)] {
+            for key in [key, pad] {
+                let before = fixture.ivars().inserts.get();
+                event("", key, none);
+                assert_eq!(*fixture.ivars().committed.borrow(), digit.to_string());
+                assert_eq!(fixture.ivars().inserts.get(), before + 1);
+            }
+        }
+    }
 
     // Draft editor page keys must not freeze the pending token and insert brackets.
     reset(controller, fixture);

@@ -23,7 +23,7 @@ async function doLookup() {
   current = null
   $('result').innerHTML = ''
   let r
-  try { r = await wm.lookup(word, $('context').value.trim()) }
+  try { r = await wm.lookup(word, $('context').value.trim(), $('lookupMode').value) }
   catch (error) { r = { error: '查询失败：' + error.message } }
   if (seq !== lookupSeq) return null // 已有更新的查询在跑，旧响应不再上屏
   current = r
@@ -71,6 +71,13 @@ function render(r) {
     $('result').innerHTML = renderSentence(r)
     bindTokenAdd()
     addCopy(r.translation)
+    if (r.grammar?.status === 'issues') {
+      addCopy(r.grammar.corrected, '复制修正后的英文')
+      const apply = document.createElement('button')
+      apply.textContent = '用修正后的英文继续检查'; apply.className = 'big'
+      apply.onclick = () => { $('word').value = r.grammar.corrected; $('lookupMode').value = 'sentence'; doLookup() }
+      $('result').append(apply)
+    }
     return
   }
 
@@ -133,7 +140,7 @@ let sentenceCtx = '' // 当前句子的英文一侧，点词入本时作为该�
 
 // 把英文一侧拆成可点击的单词 + AI 难词标注
 function renderSentence(r) {
-  const userInput = $('word').value.trim()
+  const userInput = r.original || $('word').value.trim()
   const isCn = /[一-鿿]/.test(userInput)
   // 英译汉：拆原句；汉译英：拆译文
   const enSentence = isCn ? (r.translation || '') : userInput
@@ -164,6 +171,7 @@ function renderSentence(r) {
   return `
     <h2>整句翻译</h2>
     <p class="example sentence-result">${esc(r.translation)}</p>
+    ${renderGrammar(r)}
     <div class="split-box">
       <p class="split-title">🔤 点词入本<span class="muted">　红字 = AI 挑出的难词，点句中任意单词即可查词并收录（自动带上本句作上下文）</span></p>
       <p class="tokens">${tokensHtml}</p>
@@ -171,6 +179,25 @@ function renderSentence(r) {
     </div>
     ${r.notes ? `<p class="note-box">💡 ${esc(r.notes)}</p>` : ''}
     ${sourceLine(r)}`
+}
+
+function renderGrammar(r) {
+  const g = r.grammar
+  if (!g || g.status === 'not_applicable') return ''
+  if (g.status === 'ok') return `<section class="grammar-card"><h3>语法与表达</h3><p>✓ 未发现明显问题</p><p class="muted">${esc(g.summary)}</p></section>`
+  const source = r.original || ''
+  let cursor = 0, marked = ''
+  for (const issue of g.issues) {
+    marked += esc(source.slice(cursor, issue.start)) + `<mark class="grammar-${esc(issue.severity)}" title="${esc(issue.explanation)}">${esc(source.slice(issue.start, issue.end))}</mark>`
+    cursor = issue.end
+  }
+  marked += esc(source.slice(cursor))
+  const kinds = { grammar: '语法', spelling: '拼写', punctuation: '标点', expression: '表达' }
+  return `<section class="grammar-card"><h3>语法与表达 · ${g.issues.length} 处提示</h3>
+    <p class="muted">${esc(g.summary)}</p><p class="grammar-original">${marked}</p>
+    <h4>修正后的英文</h4><p class="grammar-corrected">${esc(g.corrected)}</p>
+    <ol class="grammar-issues">${g.issues.map(issue => `<li><span class="grammar-tag">${issue.severity === 'error' ? '需要修正' : '可选建议'} · ${kinds[issue.kind] || '表达'}</span>
+      <p><del>${esc(issue.original)}</del> → <strong>${esc(issue.replacement || '删除')}</strong></p><p>${esc(issue.explanation)}</p></li>`).join('')}</ol></section>`
 }
 
 function bindTokenAdd() {
@@ -243,6 +270,17 @@ wm.onLookupPrefill(async (word) => {
 const imeComposing = (e) => e.isComposing || e.keyCode === 229
 
 $('btn').onclick = doLookup
+function invalidateEditedLookup() {
+  lookupSeq++; current = null; $('loading').hidden = true
+  $('result').innerHTML = '<p class="muted">内容已更改，点击查询查看新的翻译与检查结果。</p>'
+}
+$('word').addEventListener('input', invalidateEditedLookup)
+$('context').addEventListener('input', invalidateEditedLookup)
+$('lookupMode').onchange = () => {
+  invalidateEditedLookup()
+  $('btn').textContent = $('lookupMode').value === 'sentence' ? '翻译并检查' : '查询'
+  $('word').placeholder = $('lookupMode').value === 'sentence' ? '输入中文翻译成英文，或输入英文检查语法、用词和表达' : '查单词 · 中文问法 · 整句翻译'
+}
 $('word').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !imeComposing(e)) { e.preventDefault(); doLookup() } })
 $('context').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !imeComposing(e)) doLookup() }) // 修复：上下文框回车不能查询
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.close() })

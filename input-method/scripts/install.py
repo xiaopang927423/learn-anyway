@@ -5,7 +5,7 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser()
 parser.add_argument('--select',action='store_true',help='Select WordMate after activation has been verified')
 args=parser.parse_args()
-bundle=ROOT/'bundle/WordMateInput.app'
+bundle=ROOT/'bundle/build.noindex/WordMateInput.app'
 if not bundle.is_dir():raise SystemExit('Run scripts/build.py first')
 if pathlib.Path('/Library/Input Methods/WordMateInput.app').exists():
     raise SystemExit('A system-wide WordMate input method exists; resolve its installation location before using this per-user installer')

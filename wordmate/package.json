@@ -1,6 +1,6 @@
 {
   "name": "wordmate",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "WordMate —— 工作场景 AI 生词助手（菜单栏查词 + 生词本 + 间隔重复复习）",
   "main": "main.js",
   "scripts": {
@@ -33,7 +33,7 @@
     "appId": "com.qiji.wordmate",
     "productName": "WordMate",
     "directories": {
-      "output": "dist",
+      "output": "dist/build.noindex",
       "buildResources": "assets"
     },
     "files": [
@@ -69,7 +69,8 @@
           }
         ],
         "NSAppleEventsUsageDescription": "WordMate 在使用划词快捷键时模拟复制选中文本，用于翻译。"
-      }
+      },
+      "identity": "-"
     },
     "protocols": [
       {

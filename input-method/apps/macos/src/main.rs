@@ -10,6 +10,7 @@ mod assistant_panel;
 mod candidate_fallback;
 mod candidates;
 mod error;
+mod grammar;
 mod host;
 mod imk;
 mod menubar;

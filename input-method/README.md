@@ -46,7 +46,7 @@ python3 input-method/scripts/install.py
 
 已安装的新组件使用同一候选窗口的句下译文，原独立辅助窗口已移除。普通中文选词即时上屏；Tab 将英文词及空格保留在黑框草稿，混输中文可选入同一句，支持草稿前文编辑和整句确认翻译。英文混输入与空间边界已补充内核 / 真实模型验证。系统输入源当前已启用。操作见 [清单](../docs/测试目录/v0.5.0-操作清单.md)，确认方案见 [ADR-004](../docs/架构目录/ADR-004-选字与语言确认分离.md)。
 
-控制器回归：在隔离目录运行 `WM_IME_DATA=/tmp/wm-ime-test WM_USER_DATA=/tmp/wm-bridge-test bundle/WordMateInput.app/Contents/MacOS/WordMateInput --interaction-smoke`。使用 NSEvent 和模拟 IMK 文本客户端验证实际分发，不依赖真实模型，不代表所有宿主应用已验收。
+控制器回归：在隔离目录运行 `WM_IME_DATA=/tmp/wm-ime-test WM_USER_DATA=/tmp/wm-bridge-test bundle/build.noindex/WordMateInput.app/Contents/MacOS/WordMateInput --interaction-smoke`。使用 NSEvent 和模拟 IMK 文本客户端验证实际分发，不依赖真实模型，不代表所有宿主应用已验收。
 
 2026-10-10：修正 Space 先暂存导致需按两次的问题；短候选保留未选拼音；补可选原文与空会话恢复。通用页可开关自动记忆，常用词条页可手工新增/纠正，个人词库保存后参与候选。
 

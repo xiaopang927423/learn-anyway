@@ -11,6 +11,18 @@ if [[ -d "$wm_bundle" ]]; then
   /usr/bin/python3 - "$wm_bundle" <<'PY'
 import os,signal,subprocess,sys,time
 exe=sys.argv[1]+'/Contents/MacOS/WordMateInput'
+# End the old IMK session before replacing its process. Selecting the same ID
+# after a forced stop alone can leave clients connected to the dead service.
+source=subprocess.check_output([exe,'--current-source'],text=True).strip()
+if source=='com.qiji.wordmate.inputmethod.Hans':
+    for fallback in ['com.apple.keylayout.ABC','com.apple.keylayout.US']:
+        if subprocess.run([exe,'--select-source',fallback],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0:break
+    else:raise SystemExit('Unable to leave the active WordMate session; replacement canceled')
+    from pathlib import Path
+    marker=Path(sys.argv[1]).parents[1]/'Application Support/WordMateInput/restore-source-on-install'
+    marker.parent.mkdir(parents=True,exist_ok=True)
+    marker.write_text(source);marker.chmod(0o600)
+    time.sleep(.3)
 pids=[]
 for line in subprocess.check_output(['ps','-axo','pid=,command='],text=True).splitlines():
     parts=line.strip().split(None,1)

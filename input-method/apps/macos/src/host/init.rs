@@ -123,6 +123,7 @@ pub fn init(mtm: MainThreadMarker, info: &BundleInfo) -> Result<(), HostError> {
     let watch = ConfigWatch::new(mtm);
     HOST.with(|host| {
         *host.borrow_mut() = Some(Host {
+            grammar: crate::grammar::Grammar::new(),
             assistant: crate::wordmate::Assistant::new(),
             assistant_panel: crate::assistant_panel::AssistantPanel::new(mtm),
             active_input: None,

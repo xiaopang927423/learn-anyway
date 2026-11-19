@@ -8,11 +8,17 @@ wm_bundle="$wm_user_home/Library/Input Methods/WordMateInput.app"
 wm_exe="$wm_bundle/Contents/MacOS/WordMateInput"
 /usr/bin/codesign --verify --strict "$wm_bundle"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$wm_bundle"
-# Register in the installing user's context; never select a different keyboard automatically.
+# Register in the installing user's context; restore WordMate only when upgrading an active session.
 wm_registration=0
 "$wm_exe" --register || wm_registration=$?
 wm_state="$wm_user_home/Library/Application Support/WordMateInput"
 /bin/mkdir -p "$wm_state"
+/usr/bin/open -g "$wm_bundle"
+if [[ -f "$wm_state/restore-source-on-install" ]]; then
+  if "$wm_exe" --select-source com.qiji.wordmate.inputmethod.Hans; then
+    /bin/rm "$wm_state/restore-source-on-install"
+  fi
+fi
 "$wm_exe" --registration-status > "$wm_state/install-state.json"
 /bin/chmod 600 "$wm_state/install-state.json"
 if [[ "$wm_registration" != 0 ]]; then

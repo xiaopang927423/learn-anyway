@@ -7,7 +7,7 @@ use objc2::rc::{Allocated, Retained};
 use objc2::runtime::{AnyObject, Sel};
 use objc2::{DefinedClass, define_class, msg_send, sel};
 use objc2_app_kit::{NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSMenu};
-use objc2_foundation::NSObjectProtocol;
+use objc2_foundation::{NSObjectProtocol, NSString, NSPoint, NSProcessInfo};
 use objc2_input_method_kit::{IMKInputController, IMKServer};
 use qingjian_core::{Candidate, QUESTION_PREFIX};
 use qingjian_platform::Modifiers;
@@ -22,11 +22,16 @@ mod commit;
 mod display;
 mod draft;
 mod english;
+mod grammar;
 mod shift_tap;
 
 #[derive(Default)]
 pub struct InputState {
     shift_tap: std::cell::RefCell<shift_tap::ShiftTap>,
+    session_epoch: std::cell::Cell<u64>,
+    raw_flags_seen: std::cell::Cell<bool>,
+    polled_shift: std::cell::Cell<bool>,
+    polled_tap: std::cell::RefCell<shift_tap::ShiftTap>,
 }
 pub(crate) mod interaction_smoke;
 mod text;
@@ -56,13 +61,13 @@ define_class!(
             unsafe { msg_send![super(this), initWithServer: server, delegate: delegate, client: client] }
         }
 
-        /// 所有按键事件都到这里（IMK 第一层协议）。IMK 按控制器实现了哪一层决定路线，实现了这个方法就不会再分发成
-        /// `inputText:client:` / `didCommandBySelector:client:`（父类缺省实现也不分发），所以自己分：
+        /// 原始事件入口。部分宿主使用拆开键码或文本/命令回调，下面的兼容入口也汇入同一分发器。
         /// Option+数字上屏候选的译文（Option 会把数字键变成 ¡™£ 这类字符，只能按键码认）；命令键按键码映射成原来的选择器；
         /// 其余按事件带的字符走文本路径。返回 true 表示已处理，系统不再把按键交给应用。
         // define_class! 会把返回类型转成 ObjC BOOL，方法体里不能用 `return`，逻辑放在下面的 inherent impl
         #[unsafe(method(handleEvent:client:))]
         fn handle_event(&self, event: Option<&NSEvent>, client: Option<&AnyObject>) -> bool {
+            if diagnostic_enabled() { tracing::info!(event_present = event.is_some(), client_present = client.is_some(), event_type = ?event.map(NSEvent::r#type), "WM_EVENT_ENTRY"); }
             if let Some(event) = event {
                 if event.r#type() == NSEventType::FlagsChanged {
                     tracing::info!(key = event.keyCode(), flags = event.modifierFlags().bits(), client_present = client.is_some(), "WM_SHIFT_EVENT");
@@ -84,20 +89,66 @@ define_class!(
 
         #[unsafe(method(recognizedEvents:))]
         fn recognized_events(&self, _sender: Option<&AnyObject>) -> usize {
+            if diagnostic_enabled() { tracing::info!("WM_RECOGNIZED_EVENTS"); }
             (NSEventMask::KeyDown | NSEventMask::FlagsChanged).bits() as usize
+        }
+
+        // Some text-service clients deliver unpacked key events. Keep this
+        // adapter on the same dispatch path; it must never silently consume text.
+        #[unsafe(method(inputText:key:modifiers:client:))]
+        fn input_key(&self, text: &NSString, key: isize, flags: usize, sender: Option<&AnyObject>) -> bool {
+            self.dispatch_unpacked(text, key, flags, sender)
+        }
+
+        #[unsafe(method(inputText:client:))]
+        fn input_text(&self, text: &NSString, sender: Option<&AnyObject>) -> bool {
+            if diagnostic_enabled() { tracing::info!(characters_len = text.length(), bundle = ?sender.and_then(|s| TextClient::new(s).bundle_identifier()), "WM_INPUT_TEXT_CALLBACK"); }
+            // Keybinding clients provide the resulting text, not a hardware code.
+            // Infer only unambiguous boundary keys; the rest stays on the text path.
+            let key = match text.to_string().as_str() {
+                " " => 49, "\t" => 48, "\r" | "\n" => 36,
+                "0" => 29, "1" => 18, "2" => 19, "3" => 20, "4" => 21,
+                "5" => 23, "6" => 22, "7" => 26, "8" => 28, "9" => 25,
+                _ => 65535,
+            };
+            self.dispatch_unpacked(text, key, NSEvent::modifierFlags_class().bits() as usize, sender)
+        }
+
+        #[unsafe(method(didCommandBySelector:client:))]
+        fn command(&self, selector: Sel, sender: Option<&AnyObject>) -> bool {
+            if diagnostic_enabled() { tracing::info!(selector = %selector, "WM_COMMAND_CALLBACK"); }
+            let key = if selector == sel!(insertNewline:) { Some(36) }
+                else if selector == sel!(insertTab:) || selector == sel!(insertBacktab:) { Some(48) }
+                else if selector == sel!(deleteBackward:) { Some(51) }
+                else if selector == sel!(cancelOperation:) { Some(53) }
+                else if selector == sel!(moveLeft:) { Some(123) }
+                else if selector == sel!(moveRight:) { Some(124) }
+                else if selector == sel!(moveUp:) { Some(126) }
+                else if selector == sel!(moveDown:) { Some(125) }
+                else if selector == sel!(pageUp:) { Some(116) }
+                else if selector == sel!(pageDown:) { Some(121) }
+                else { None };
+            if let Some(key) = key {
+                self.dispatch_unpacked(&NSString::from_str(""), key, NSEvent::modifierFlags_class().bits() as usize, sender)
+            } else if let Some(sender) = sender {
+                if secure_input::enabled() || self.in_login_window() { false }
+                else { catch_panic("didCommandBySelector", || self.handle_command(selector, TextClient::new(sender))).unwrap_or(false) }
+            } else { false }
         }
 
         /// 应用要求立刻结束本次输入（切换焦点、切换输入法等）。
         #[unsafe(method(commitComposition:))]
         fn commit_composition(&self, client: Option<&AnyObject>) {
-            self.ivars().shift_tap.borrow_mut().cancel();
+            // A host may flush marked text between modifier down/up without
+            // ending the input session. Preserve a solo Shift until release;
+            // activate/deactivate and actual chords reset it instead.
             let client = client.map(TextClient::new);
             let done = catch_panic("commitComposition", || {
                 if let Some(client) = client {
                     self.commit_raw(client);
                 }
                 host::with(|h| {
-                    h.active_input = None;
+                    h.grammar.cancel();
                     h.assistant_panel.hide();
                     h.assistant.invalidate(true);
                     h.cancel_prediction();
@@ -112,13 +163,24 @@ define_class!(
 
         #[unsafe(method(activateServer:))]
         fn activate_server(&self, sender: Option<&AnyObject>) {
+            self.ivars().session_epoch.set(self.ivars().session_epoch.get().wrapping_add(1));
+            self.ivars().raw_flags_seen.set(false);
+            self.ivars().polled_shift.set(modifiers::shift_down());
+            self.ivars().polled_tap.borrow_mut().cancel();
+            self.ivars().shift_tap.borrow_mut().cancel();
             tracing::info!("activateServer");
             let done = catch_panic("activateServer", || {
                 // 用户要往 [apps] 里加应用时，从这条日志抄 bundle identifier
                 let bundle = sender.and_then(|s| TextClient::new(s).bundle_identifier());
 
                 host::with(|h| {
+                    h.active_input = sender.map(|sender| (
+                        unsafe { Retained::retain((self as *const Self).cast_mut()).expect("controller") },
+                        unsafe { Retained::retain((sender as *const AnyObject).cast_mut()).expect("client") },
+                    ));
                     h.assistant.invalidate(true);
+                    h.grammar.cancel();
+                    h.assistant_panel.hide();
                     h.engine.set_application(bundle);
                     h.refresh_text_replacements();
                     h.reload_config_if_changed();
@@ -147,6 +209,7 @@ define_class!(
 
         #[unsafe(method(deactivateServer:))]
         fn deactivate_server(&self, sender: Option<&AnyObject>) {
+            self.ivars().session_epoch.set(self.ivars().session_epoch.get().wrapping_add(1));
             tracing::info!("deactivateServer");
             self.ivars().shift_tap.borrow_mut().cancel();
             let client = sender.map(TextClient::new);
@@ -157,6 +220,7 @@ define_class!(
                 // 切换输入源时无论如何都收掉候选框，不能留一个孤儿窗口在屏幕上
                 host::with(|h| {
                     h.active_input = None;
+                    h.grammar.cancel();
                     h.assistant_panel.hide();
                     h.assistant.invalidate(true);
                     h.cancel_prediction();
@@ -209,7 +273,57 @@ fn digit_key(key_code: u16) -> Option<usize> {
     })
 }
 
+fn physical_digit(key_code: u16) -> Option<usize> {
+    if matches!(key_code, 29 | 82) { Some(0) } else { digit_key(key_code) }
+}
+
+fn diagnostic_enabled() -> bool {
+    std::env::var_os("HOME").is_some_and(|home| std::path::PathBuf::from(home)
+        .join("Library/Application Support/WordMateInput/input-diagnostics.enabled").exists())
+}
+
 impl WordMateInputController {
+    fn dispatch_unpacked(&self, text: &NSString, key: isize, flags: usize, sender: Option<&AnyObject>) -> bool {
+            let event = u16::try_from(key).ok().and_then(|key| NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+                NSEventType::KeyDown, NSPoint::ZERO, NSEventModifierFlags::from_bits_retain(flags as _),
+                NSProcessInfo::processInfo().systemUptime(), 0, None, text, text, false, key));
+            if diagnostic_enabled() {
+                // Diagnose numeric/navigation routing without logging alphabetic
+                // key codes, which could otherwise reconstruct ordinary typing.
+                let key = u16::try_from(key).ok().filter(|&key| physical_digit(key).is_some()
+                    || matches!(key, 36 | 48 | 49 | 51 | 53 | 56 | 60 | 116 | 121 | 123..=126));
+                tracing::info!(characters_len = text.length(), key = ?key, flags, event_created = event.is_some(), bundle = ?sender.and_then(|s| TextClient::new(s).bundle_identifier()), "WM_INPUT_KEY_CALLBACK");
+            }
+            match (event, sender) {
+                (Some(event), Some(sender)) => {
+                    let client = TextClient::new(sender);
+                    catch_panic("inputText:key", || self.dispatch_event(&event, client))
+                        .unwrap_or_else(|| { recover_from_panic(Some(client)); false })
+                }
+                _ => false,
+            }
+    }
+
+    /// Text/keybinding clients may omit modifier events. Poll only those sessions;
+    /// raw-event clients continue using the exact physical-key tap state machine.
+    pub(crate) fn poll_shift() {
+        let active = host::with(|h| h.active_input.clone()).flatten();
+        let Some((controller, object)) = active else { return; };
+        if controller.ivars().raw_flags_seen.get() { return; }
+        let flags = NSEvent::modifierFlags_class();
+        let shift = flags.contains(NSEventModifierFlags::Shift);
+        let previous = controller.ivars().polled_shift.replace(shift);
+        let other = flags.intersects(NSEventModifierFlags::Command | NSEventModifierFlags::Control | NSEventModifierFlags::Option);
+        let enabled = host::with(|h| h.settings.config().shortcut.switch_mode.shift).unwrap_or(false);
+        if !enabled || secure_input::enabled() || controller.in_login_window() {
+            controller.ivars().polled_tap.borrow_mut().cancel(); return;
+        }
+        if other { controller.ivars().polled_tap.borrow_mut().interrupt(); }
+        if previous == shift { return; }
+        let switch = controller.ivars().polled_tap.borrow_mut().flags(56, shift, other, NSProcessInfo::processInfo().systemUptime());
+        if switch { controller.toggle_keyboard(TextClient::new(&object)); }
+    }
+
     /// 登录 / 锁屏窗口：输入源菜单里没有WordMate 输入法，loginwindow 却照样激活它，按键一律交还系统。
     ///
     /// TODO(#190): 临时防护。现象是开机登录界面打不进模式键（u / i），推断为按键进了WordMate 输入法的组句；
@@ -221,6 +335,39 @@ impl WordMateInputController {
 
     /// 一个按键事件的分发：只管按下；Cmd / Ctrl 组合除 Cmd+左右外一律交给应用；命令键映射成选择器；其余按字符当文本。
     fn dispatch_event(&self, event: &NSEvent, client: TextClient<'_>) -> bool {
+        let epoch = self.ivars().session_epoch.get();
+        let diagnostic = event.r#type() == NSEventType::KeyDown
+            && physical_digit(event.keyCode()).is_some()
+            && diagnostic_enabled();
+        if diagnostic {
+            tracing::info!(pid = std::process::id(), flags = event.modifierFlags().bits(),
+                characters_len = event.characters().map(|s| s.len()),
+                english = modifiers::english_mode(), bundle = ?client.bundle_identifier(),
+                composing = host::with(|h| h.is_composing()).unwrap_or(false), "WM_DIGIT_BEGIN");
+        }
+        let handled = self.dispatch_key_event(event, client);
+        if diagnostic { tracing::info!(pid = std::process::id(), handled, "WM_DIGIT_END"); }
+        // IMK may synchronously flush composition while a boundary is inserted.
+        // Arm the debounce afterwards, but never restore a deactivated session.
+        if event.r#type() == NSEventType::KeyDown && epoch == self.ivars().session_epoch.get()
+            && !secure_input::enabled() && !self.in_login_window() && modifiers::english_mode()
+            && !event.modifierFlags().intersects(NSEventModifierFlags::Command | NSEventModifierFlags::Control | NSEventModifierFlags::Option) {
+            let bundle = client.bundle_identifier();
+            if epoch == self.ivars().session_epoch.get() {
+                host::with(|h| {
+                    if h.engine.is_private() || bundle.as_deref().is_some_and(|b| h.apps.english_candidates_off(b)) { return; }
+                    h.active_input = Some((
+                        unsafe { Retained::retain((self as *const Self).cast_mut()).expect("controller") },
+                        unsafe { Retained::retain(client.object_ptr().cast_mut()).expect("client") },
+                    ));
+                    h.grammar.edited();
+                });
+            }
+        }
+        handled
+    }
+
+    fn dispatch_key_event(&self, event: &NSEvent, client: TextClient<'_>) -> bool {
         if !matches!(
             event.r#type(),
             NSEventType::KeyDown | NSEventType::FlagsChanged
@@ -232,6 +379,7 @@ impl WordMateInputController {
         if secure_input::enabled() {
             self.ivars().shift_tap.borrow_mut().cancel();
             host::with(|h| {
+                h.grammar.cancel();
                 h.assistant.draft.clear();
                 h.assistant.draft_cursor = None;
                 h.assistant.invalidate(true);
@@ -246,6 +394,8 @@ impl WordMateInputController {
             return false;
         }
         if event.r#type() == NSEventType::FlagsChanged {
+            self.ivars().raw_flags_seen.set(true);
+            self.ivars().polled_tap.borrow_mut().cancel();
             let flags = event.modifierFlags();
             let enabled =
                 host::with(|h| h.settings.config().shortcut.switch_mode.shift).unwrap_or(true);
@@ -271,8 +421,11 @@ impl WordMateInputController {
             return false;
         }
         self.ivars().shift_tap.borrow_mut().interrupt();
+        self.ivars().polled_tap.borrow_mut().interrupt();
         host::with(|h| {
             h.watch.start();
+            h.grammar.cancel();
+            h.assistant_panel.hide();
             // Retained proxies exist only for the active generation; deactivate clears both.
             h.active_input = Some((
                 unsafe { Retained::retain((self as *const Self).cast_mut()).expect("controller") },
@@ -498,11 +651,19 @@ impl WordMateInputController {
         }
         // Some IMK clients omit characters for physical digit keys, just as for
         // Space. Route them through text handling so expression modes still work.
-        if pressed.is_empty()
-            && event.characters().is_none_or(|text| text.is_empty())
-            && let Some(digit) = digit_key(key)
-        {
-            return self.handle_text(&digit.to_string(), client);
+        if pressed.is_empty() && let Some(digit) = physical_digit(key) {
+            let characters = event.characters().map(|s| s.to_string()).unwrap_or_default();
+            // Do not turn other keyboard layouts' printable symbols into digits.
+            if characters.is_empty() || characters == digit.to_string() {
+                let text = digit.to_string();
+                if !host::with(|h| h.is_composing()).unwrap_or(false)
+                    || !self.handle_text(&text, client)
+                {
+                    client.insert_text(&text);
+                    host::with(|h| h.engine.note_passthrough(char::from(b'0' + digit as u8)));
+                }
+                return true;
+            }
         }
         // Space is a physical word boundary. Some IMK clients report an empty
         // characters string for it; still route it through the mixed-input policy.

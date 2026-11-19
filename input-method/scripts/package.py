@@ -4,7 +4,7 @@ import json, pathlib, plistlib, shutil, subprocess, tempfile
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 release=json.loads((ROOT.parent/'release.json').read_text())
 version=release['components']['inputMethod']
-bundle=ROOT/'bundle/WordMateInput.app'
+bundle=ROOT/'bundle/build.noindex/WordMateInput.app'
 if not bundle.exists():raise SystemExit('Build WordMateInput.app first')
 info=plistlib.loads((bundle/'Contents/Info.plist').read_bytes())
 if (info['CFBundleShortVersionString'],info['CFBundleVersion']) != (version,release['inputMethodBuild']):

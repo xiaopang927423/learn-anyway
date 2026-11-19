@@ -16,12 +16,12 @@ class ReleaseInstallTests(unittest.TestCase):
     def fixture(self, directory, version='0.6.4', build='6040'):
         root = Path(directory).resolve() / 'input-method'
         (root / 'scripts').mkdir(parents=True)
-        (root / 'bundle/WordMateInput.app/Contents').mkdir(parents=True)
+        (root / 'bundle/build.noindex/WordMateInput.app/Contents').mkdir(parents=True)
         (root / 'dist').mkdir()
         (root.parent / 'release.json').write_text(json.dumps({
             'components': {'inputMethod': '0.6.4'}, 'inputMethodBuild': '6040',
         }))
-        (root / 'bundle/WordMateInput.app/Contents/Info.plist').write_bytes(plistlib.dumps({
+        (root / 'bundle/build.noindex/WordMateInput.app/Contents/Info.plist').write_bytes(plistlib.dumps({
             'CFBundleShortVersionString': version, 'CFBundleVersion': build,
         }))
         return root

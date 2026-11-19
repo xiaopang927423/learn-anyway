@@ -303,8 +303,8 @@ function updateBadge() {
 
 // ---------------- IPC 接口（渲染进程可调用的 API） ----------------
 function registerIpc() {
-  ipcMain.handle('lookup:query', async (e, word, context) => {
-    const result = await translator.lookup(word, context)
+  ipcMain.handle('lookup:query', async (e, word, context, mode) => {
+    const result = await translator.lookup(word, context, mode === 'sentence' ? 'sentence' : 'auto')
     changed('lookup')
     return result
   })

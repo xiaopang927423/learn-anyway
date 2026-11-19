@@ -9,13 +9,15 @@ const dict = require('./dict')
 
 const SINGLE_WORD_RE = /^[a-zA-Z'‘’-]+$/ // 纯字母（允许 ASCII 撇号/弯撇号/连字符）= 单个英文单词
 
-async function lookup(rawInput, context) {
+async function lookup(rawInput, context, mode = 'auto') {
   const input = String(rawInput || '').trim()
   if (!input) return { error: '请输入单词或句子' }
 
   if (input.length > 12000) return { error: '选中文本过长，请控制在 12000 字符以内' }
   const key = input.toLowerCase()
   const isSingleWord = SINGLE_WORD_RE.test(key)
+  const review = mode === 'sentence' || (!isSingleWord && /[A-Za-z]/.test(input) && !/[\u3400-\u9fff]/.test(input))
+  if (review && input.length > 4000) return { error: '句子检查请控制在 4000 字符以内' }
 
   const isVocabulary = /^[a-zA-Z][a-zA-Z'‘’ -]*$/.test(input) && input.length <= 200
   let inNotebook = isVocabulary ? db.hasWord(key) : false
@@ -26,15 +28,15 @@ async function lookup(rawInput, context) {
 
   // 查到的英文单词自动入生词本（设置里可关）；句子/中译英不入本
   function ensureInNotebook(result) {
-    if (inNotebook || !db.getSettings().autoAdd || !isVocabulary) return
+    if (review || inNotebook || !db.getSettings().autoAdd || !isVocabulary) return
     if (!result || result.type === 'sentence' || result.type === 'zh2en') return
     db.addWord({ ...result, word: key, source: result.source || '' }, context || '', lookupCount)
     inNotebook = true
   }
 
   // 模型、上下文和原始大小写均参与缓存键，避免切模型或换语境仍返回旧结果。
-  const cacheKey = 'v3:' + require('crypto').createHash('sha256')
-    .update(JSON.stringify([input, String(context || ''), settings.baseUrl, settings.model, settings.thinkingEnabled === true, settings.thinkingParameter || 'auto'])).digest('hex')
+  const cacheKey = 'v4:' + require('crypto').createHash('sha256')
+    .update(JSON.stringify([input, String(context || ''), review, settings.baseUrl, settings.model, settings.thinkingEnabled === true, settings.thinkingParameter || 'auto'])).digest('hex')
 
   // 1) 本地缓存：查过就秒出（句子翻译结果同样缓存）
   const cached = db.getCache(cacheKey)
@@ -53,7 +55,7 @@ async function lookup(rawInput, context) {
   // 2) 云端 AI
   if (settings.apiKey) {
     try {
-      result = await require('./model-request-queue').modelQueue.run('lookup', () => ai.translate(input, context, settings))
+      result = await require('./model-request-queue').modelQueue.run('lookup', () => review ? ai.reviewSentence(input, context, settings) : ai.translate(input, context, settings))
       source = 'ai'
     } catch (err) {
       failure = /timeout|aborted/i.test(err.message) ? '请求超时（45 秒）' : err.message
@@ -62,7 +64,7 @@ async function lookup(rawInput, context) {
   }
 
   // 3) 本地词典兜底（只对单个单词生效，且需配置了 ECDICT）
-  if (!result && isSingleWord) {
+  if (!result && isSingleWord && !review) {
     result = await dict.lookup(key)
     if (result) {
       source = 'local_dict'

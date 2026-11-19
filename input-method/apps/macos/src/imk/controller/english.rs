@@ -7,6 +7,8 @@ impl WordMateInputController {
             self.commit_raw(client);
         }
         host::with(|h| {
+            h.grammar.cancel();
+            h.assistant_panel.hide();
             h.end_translation();
             h.assistant.invalidate(true);
             h.cancel_prediction();
@@ -49,19 +51,17 @@ impl WordMateInputController {
         }
         let composing = host::with(|h| !h.engine.composition().is_empty()).unwrap_or(false);
         let single = text.chars().next().filter(|_| text.chars().count() == 1);
-        if !composing && single.is_some_and(|c| c.is_ascii_digit()) {
-            host::with(|h| h.engine.note_passthrough(single.unwrap()));
-            return false;
-        }
-        // The window labels candidates 1–9 in both modes. Honor those labels
-        // before treating a digit as part of an English token.
-        if composing
-            && let Some(digit) = single.and_then(|c| c.to_digit(10)).filter(|d| *d > 0)
-            && let Some(index) =
-                host::with(|h| h.session.index_on_page(digit as usize - 1)).flatten()
-            && host::with(|h| h.session.candidate(index).is_some()).unwrap_or(false)
-        {
-            return self.commit_number(index, client);
+        // Digits are literal in English (IDs, dates, passwords, mixed tokens).
+        // Tab or a mouse click adopts a completion; Chinese keeps numeric selection.
+        if single.is_some_and(|c| c.is_ascii_digit()) {
+            if composing {
+                host::with(|h| h.engine.push(single.unwrap()));
+                self.refresh(client);
+            } else {
+                client.insert_text(text);
+                host::with(|h| h.engine.note_passthrough(single.unwrap()));
+            }
+            return true;
         }
         if let Some(c) = single
             .filter(|c| c.is_ascii_alphanumeric() || (composing && matches!(c, '\'' | '_' | '-')))
@@ -98,11 +98,15 @@ impl WordMateInputController {
             }
             return false;
         }
-        if !flags.contains(NSEventModifierFlags::Shift)
-            && event.characters().is_none_or(|text| text.is_empty())
-            && let Some(digit) = digit_key(key)
-        {
-            return self.handle_english_text(&digit.to_string(), client);
+        if !flags.contains(NSEventModifierFlags::Shift) && let Some(digit) = physical_digit(key) {
+            let characters = event.characters().map(|s| s.to_string()).unwrap_or_default();
+            if characters.is_empty() || characters == digit.to_string() {
+                let text = digit.to_string();
+                if !self.handle_english_text(&text, client) {
+                    client.insert_text(&text);
+                }
+                return true;
+            }
         }
         match key {
             49 => {

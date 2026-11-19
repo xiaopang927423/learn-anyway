@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS = {
   remindTime: '20:00',   // 每日复习提醒时间
   notifyEnabled: true,   // 是否开启系统通知提醒
   imeEnabled: false,
+  imeGrammarEnabled: true,
   imeAutoAdd: true,
   imeSaveContext: false,
   autoAdd: true,         // 查到的英文单词自动加入生词本
@@ -315,7 +316,7 @@ function saveSettings(patch) {
   if (!patch || typeof patch !== 'object') throw new Error('无效设置')
   if ('remindTime' in patch && !/^([01]\d|2[0-3]):[0-5]\d$/.test(patch.remindTime)) throw new Error('无效提醒时间')
   if ('dictationCount' in patch && (!Number.isInteger(patch.dictationCount) || patch.dictationCount < 0 || patch.dictationCount > 200)) throw new Error('每轮默写词数必须为 0–200')
-  for (const k of ['autoAdd', 'notifyEnabled', 'dictationAffectsSchedule', 'thinkingEnabled', 'imeEnabled', 'imeAutoAdd', 'imeSaveContext']) if (k in patch && typeof patch[k] !== 'boolean') throw new Error('无效开关')
+  for (const k of ['autoAdd', 'notifyEnabled', 'dictationAffectsSchedule', 'thinkingEnabled', 'imeEnabled', 'imeGrammarEnabled', 'imeAutoAdd', 'imeSaveContext']) if (k in patch && typeof patch[k] !== 'boolean') throw new Error('无效开关')
   for (const k of ['baseUrl','apiKey','model']) if (k in patch && typeof patch[k] !== 'string') throw new Error('无效模型设置')
   if (patch.baseUrl) {
     const url = new URL(patch.baseUrl)

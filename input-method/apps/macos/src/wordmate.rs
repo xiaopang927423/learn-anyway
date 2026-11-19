@@ -106,12 +106,12 @@ fn launch_backend() {
 pub fn rpc(method: &str, payload: Value) -> Result<Value, String> {
     rpc_cancellable(method, payload, None)
 }
-fn rpc_cancellable(
+pub(crate) fn rpc_cancellable(
     method: &str,
     payload: Value,
     cancel: Option<(&AtomicU64, u64)>,
 ) -> Result<Value, String> {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(if method == "grammar.check" { 30 } else { 5 });
     let dir = backend_dir();
     let path = dir.join("ime.sock");
     let mut stream = match UnixStream::connect(&path) {

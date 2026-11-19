@@ -65,12 +65,9 @@ npm start
 >
 > ```bash
 > npm install                 # 会自动 install-app-deps，编译 native/ 插件
-> npm run dist                # 打包出 dist/mac-arm64/WordMate.app
-> mkdir -p ~/Applications
-> ditto dist/mac-arm64/WordMate.app ~/Applications/WordMate.app
-> open ~/Applications/WordMate.app
-> /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
->   -f ~/Applications/WordMate.app   # 若右键「服务」里暂时没出现，手动注册一次；重开应用/重登通常也会刷新
+> npm run dist                # 打包出 dist/build.noindex/mac-arm64/WordMate.app
+> npm run install:mac         # 保留现有安装位置、ZIP 备份，只留一个桌面应用
+> # 命令会注册并启动应用，输出实际安装路径；已有 /Applications/WordMate.app 时沿用该位置。
 > ```
 >
 > 之后在别的应用选中文字右键即可。改过 `native/` 或 `NSServices` 配置后重新 `npm run dist` 生效。

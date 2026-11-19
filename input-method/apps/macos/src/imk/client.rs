@@ -48,6 +48,22 @@ impl<'a> TextClient<'a> {
             unsafe { msg_send![self.object, attributedSubstringFromRange: range] };
         value.map(|v| v.string().to_string())
     }
+    pub fn grammar_snapshot(&self) -> Option<crate::grammar::Snapshot> {
+        let selected: NSRange = unsafe { msg_send![self.object, selectedRange] };
+        let marked: NSRange = unsafe { msg_send![self.object, markedRange] };
+        if selected.location == NSNotFound as usize || selected.length != 0
+            || (marked.location != NSNotFound as usize && marked.length != 0) { return None; }
+        let length = selected.location.min(1000);
+        let before = self.read_range(NSRange::new(selected.location - length, length))?;
+        crate::grammar::snapshot(&before, selected.location)
+    }
+
+    pub fn grammar_matches(&self, snapshot: &crate::grammar::Snapshot) -> bool {
+        let selected: NSRange = unsafe { msg_send![self.object, selectedRange] };
+        selected.location == snapshot.caret && selected.length == 0
+            && self.read_range(snapshot.range).as_deref() == Some(snapshot.source.as_str())
+    }
+
     /// Sync a host mouse caret only within this exact marked composition.
     pub fn caret_in_marked(&self, owned: &str) -> Option<usize> {
         let marked: NSRange = unsafe { msg_send![self.object, markedRange] };

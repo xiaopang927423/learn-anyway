@@ -128,7 +128,8 @@ impl Host {
             .enumerate()
             .map(|(i, cell)| {
                 let offset = i % size;
-                let labelled = columns == 0 || (first + i) / size == page;
+                let labelled = (!self.engine.english_mode() || self.translation.is_some())
+                    && (columns == 0 || (first + i) / size == page);
                 let index = if labelled {
                     (offset + 1).to_string()
                 } else {
@@ -192,7 +193,7 @@ impl Host {
             ))
         } else if self.engine.english_mode() {
             Some(format!(
-                "英文 · Space 空格 · Tab 补全 · {}{} 中英切换",
+                "英文 · 数字直输 · Tab 补全 · {}{} 中英切换",
                 if self.settings.config().shortcut.switch_mode.shift {
                     "单击 Shift / "
                 } else {

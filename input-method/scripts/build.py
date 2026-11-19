@@ -32,7 +32,7 @@ for item in manifest['files']:
 command = ['cargo', 'build', '--offline', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'qingjian-macos']
 if args.release: command.append('--release')
 subprocess.run(command, check=True)
-bundle = ROOT / 'bundle/WordMateInput.app'
+bundle = ROOT / 'bundle/build.noindex/WordMateInput.app'
 contents = bundle / 'Contents'
 (contents / 'MacOS').mkdir(parents=True, exist_ok=True)
 output = contents / 'Resources'

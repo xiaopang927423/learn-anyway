@@ -1,6 +1,6 @@
 // 保留实际安装路径，避免升级生成另一个开机时不会使用的副本。
 const fs = require('fs'), path = require('path'), os = require('os'), {execFileSync} = require('child_process')
-const bundle = path.resolve(__dirname,'../dist/mac-arm64/WordMate.app')
+const bundle = path.resolve(__dirname,'../dist/build.noindex/mac-arm64/WordMate.app')
 if (!fs.existsSync(bundle)) throw new Error('请先运行 npm run dist')
 // Reject stale packages before stopping the daily app: version alone does not
 // establish that the paired native input method can connect to this backend.
@@ -16,7 +16,6 @@ function verifyImePackage(appBundle) {
 verifyImePackage(bundle)
 const userBundle = path.join(os.homedir(),'Applications/WordMate.app')
 const destination = fs.existsSync('/Applications/WordMate.app') ? '/Applications/WordMate.app' : userBundle
-const backup = path.join(os.homedir(),'Library/Application Support/WordMate/app-backup/WordMate.app')
 const processes = execFileSync('/bin/ps',['-axo','pid=,command='],{encoding:'utf8'}).split('\n')
 for (const line of processes) {
   const match=line.trim().match(/^(\d+)\s+(.+)$/)
@@ -24,16 +23,12 @@ for (const line of processes) {
     try { process.kill(Number(match[1]),'SIGTERM') } catch {}
   }
 }
-if (fs.existsSync(destination)) {
-  fs.mkdirSync(path.dirname(backup),{recursive:true})
-  execFileSync('/usr/bin/ditto',[destination,backup])
-}
-fs.mkdirSync(path.dirname(destination),{recursive:true})
-execFileSync('/usr/bin/ditto',[bundle,destination])
+execFileSync('/usr/bin/python3',[
+  path.resolve(__dirname,'../../scripts/local-installer/desktop-bundle.py'),
+  '--home',os.homedir(),'--source',bundle,
+],{stdio:'inherit'})
 verifyImePackage(destination)
-// 本项目曾安装的用户目录副本同步升级，避免手动打开该副本又回到旧后端。
-if (destination !== userBundle && fs.existsSync(userBundle)) execFileSync('/usr/bin/ditto',[bundle,userBundle])
 execFileSync('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister',['-f',destination])
 execFileSync('/usr/bin/python3',[path.join(destination,'Contents/Resources/scripts/install-browser-host.py')],{stdio:'inherit'})
 execFileSync('/usr/bin/open',['-g',destination,'--args','--browser-background'])
-console.log('INSTALLED '+destination+'; BACKUP '+backup)
+console.log('INSTALLED '+destination+'; backups archived as ZIP in ~/Library/Application Support/WordMate/app-backup')

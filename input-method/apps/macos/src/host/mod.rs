@@ -56,6 +56,7 @@ pub use presenting::TranslationJob;
 pub use session::Session;
 
 pub struct Host {
+    pub grammar: crate::grammar::Grammar,
     pub assistant: crate::wordmate::Assistant,
     pub assistant_panel: crate::assistant_panel::AssistantPanel,
     pub active_input: Option<(

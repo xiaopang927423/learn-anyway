@@ -41,9 +41,10 @@ function thinkingOptions(settings) {
   return {}
 }
 
-async function translate(text, context, settings) {
+async function translate(text, context, settings, options = {}) {
   const base = (settings.baseUrl || DEFAULT_BASE).trim().replace(/\/+$/, '')
-  const signal = AbortSignal.timeout(45000)
+  const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(45000)]) : AbortSignal.timeout(45000)
+  const prompt = options.sentence ? require('./sentence-review').PROMPT : SYSTEM_PROMPT
   let user = `请处理：${text}`
   if (context) user += `\n上下文句子：${context}\n请结合这个语境给出最贴切的结果。`
   let jsonMode = true, repaired = false
@@ -56,9 +57,9 @@ async function translate(text, context, settings) {
         body: JSON.stringify({
           ...thinkingOptions(settings), model: settings.model || 'qwen-turbo',
           ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
-          max_tokens: repaired ? 4096 : 3072,
+          max_tokens: options.sentence ? 8192 : repaired ? 4096 : 3072,
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT + (repaired ? '\n上次回复格式不完整。这次直接返回完整 JSON，释义和例句简洁，省略非必要附加字段，不输出思考。' : '') },
+            { role: 'system', content: prompt + (repaired ? '\n上次回复格式不完整。这次直接返回完整 JSON，内容简洁，保留必需字段，不输出思考。' : '') },
             { role: 'user', content: user },
           ],
           temperature: settings.model === 'diffu' ? 0 : 0.3,
@@ -77,16 +78,25 @@ async function translate(text, context, settings) {
       if (data?.choices?.[0]?.finish_reason === 'length') throw new ResponseFormatError('模型输出被截断，词典结果不完整')
       const content = answerText(data)
       if (!content.trim()) throw new ResponseFormatError('模型未返回最终结果（可能只返回了推理内容）')
-      const parsed = extractJSON(content)
-      try { validate(parsed, text) } catch (error) { throw new ResponseFormatError(error.message) }
+      let parsed = extractJSON(content)
+      try {
+        if (options.sentence) parsed = require('./sentence-review').normalizeReview(parsed, text)
+        else validate(parsed, text)
+      } catch (error) { throw new ResponseFormatError(error.message) }
       return { ...parsed, ...(repaired ? { recovered: true } : {}) }
     } catch (error) {
+      if (options.signal?.aborted) throw options.signal.reason || error
       if (signal.aborted) throw new Error('翻译请求超时（45秒），请重试')
       if (!(error instanceof ResponseFormatError) || repaired || request === 2) throw error
       repaired = true
     }
   }
   throw new Error('当前模型不支持词典输出格式，请更换模型或重试')
+}
+
+async function reviewSentence(text, context, settings, signal) {
+  if (typeof text !== 'string' || !text.trim() || text.length > 4000) throw new Error('句子检查支持 1–4000 个字符')
+  return translate(text.trim(), context, settings, { sentence: true, signal })
 }
 
 function answerText(data) {
@@ -317,4 +327,4 @@ async function predictIme(payload, settings, signal) {
   if (result.sentence!=null && (typeof result.sentence!=='string'||result.sentence.length>1000)) throw new Error('整句格式无效')
   return {words:result.words.slice(0,limit), sentence:payload.wantSentence && result.sentence || null}
 }
-module.exports = { translate, ping, translatePassage, thinkingOptions, translateIme, predictIme }
+module.exports = { translate, reviewSentence, ping, translatePassage, thinkingOptions, translateIme, predictIme }
